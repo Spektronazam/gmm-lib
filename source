@@ -1,0 +1,1975 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local ContextActionService = game:GetService("ContextActionService")
+local SoundService = game:GetService("SoundService")
+
+local GmmUI = {}
+GmmUI.__index = GmmUI
+
+local Menu = {}
+Menu.__index = Menu
+
+local function mk(className, props)
+	local inst = Instance.new(className)
+	for key, value in pairs(props or {}) do
+		inst[key] = value
+	end
+	return inst
+end
+
+local function tween(obj, info, props)
+	local t = TweenService:Create(obj, info, props)
+	t:Play()
+	return t
+end
+
+local function mix(a, b, alpha)
+	return Color3.new(
+		a.R + (b.R - a.R) * alpha,
+		a.G + (b.G - a.G) * alpha,
+		a.B + (b.B - a.B) * alpha
+	)
+end
+
+local function lighten(color, amount)
+	return mix(color, Color3.new(1, 1, 1), amount)
+end
+
+local function darken(color, amount)
+	return mix(color, Color3.new(0, 0, 0), amount)
+end
+
+local function smartShift(color, amount)
+	local lum = (0.2126 * color.R) + (0.7152 * color.G) + (0.0722 * color.B)
+	if lum > 0.6 then
+		return darken(color, amount)
+	end
+	return lighten(color, amount)
+end
+
+local function cloneTable(tbl)
+	local new = {}
+	for key, value in pairs(tbl or {}) do
+		if typeof(value) == "table" then
+			local inner = {}
+			for innerKey, innerValue in pairs(value) do
+				inner[innerKey] = innerValue
+			end
+			new[key] = inner
+		else
+			new[key] = value
+		end
+	end
+	return new
+end
+
+local function applyTable(into, from)
+	for key, value in pairs(from or {}) do
+		if typeof(value) == "table" and typeof(into[key]) == "table" then
+			for innerKey, innerValue in pairs(value) do
+				into[key][innerKey] = innerValue
+			end
+		else
+			into[key] = value
+		end
+	end
+	return into
+end
+
+local function addCorner(obj, radius)
+	return mk("UICorner", {
+		Parent = obj,
+		CornerRadius = UDim.new(0, math.max(0, tonumber(radius) or 0))
+	})
+end
+
+local function addStroke(obj, color, transparency, thickness)
+	return mk("UIStroke", {
+		Parent = obj,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		Color = color,
+		Transparency = transparency or 0,
+		Thickness = thickness or 1
+	})
+end
+
+local function addPadding(obj, left, right, top, bottom)
+	return mk("UIPadding", {
+		Parent = obj,
+		PaddingLeft = UDim.new(0, left or 0),
+		PaddingRight = UDim.new(0, right or 0),
+		PaddingTop = UDim.new(0, top or 0),
+		PaddingBottom = UDim.new(0, bottom or 0)
+	})
+end
+
+local function offsetUDim2(pos, x, y)
+	return UDim2.new(
+		pos.X.Scale,
+		pos.X.Offset + (x or 0),
+		pos.Y.Scale,
+		pos.Y.Offset + (y or 0)
+	)
+end
+
+local function gtaText(value)
+	return string.upper(tostring(value or ""))
+end
+
+local function safeParentGui()
+	local lp = Players.LocalPlayer
+	local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
+	if pg then
+		return pg
+	end
+	return game:GetService("CoreGui")
+end
+
+local PRESET_THEME_ORDER = {
+	"GTA5",
+	"Online",
+	"Michael",
+	"Franklin",
+	"Trevor",
+	"Director"
+}
+
+local PRESET_THEMES = {
+	GTA5 = {
+		Accent = Color3.fromRGB(60, 120, 255),
+		Select = Color3.fromRGB(242, 242, 242),
+		Bg = Color3.fromRGB(8, 8, 8),
+		Text = Color3.fromRGB(255, 255, 255),
+		TitleText = Color3.fromRGB(255, 255, 255),
+		SelectedText = Color3.fromRGB(12, 12, 12),
+		Scroller = Color3.fromRGB(60, 120, 255)
+	},
+	Online = {
+		Accent = Color3.fromRGB(80, 190, 110),
+		Select = Color3.fromRGB(242, 242, 242),
+		Bg = Color3.fromRGB(8, 8, 8),
+		Text = Color3.fromRGB(255, 255, 255),
+		TitleText = Color3.fromRGB(255, 255, 255),
+		SelectedText = Color3.fromRGB(12, 12, 12),
+		Scroller = Color3.fromRGB(80, 190, 110)
+	},
+	Michael = {
+		Accent = Color3.fromRGB(70, 130, 255),
+		Select = Color3.fromRGB(242, 242, 242),
+		Bg = Color3.fromRGB(8, 8, 8),
+		Text = Color3.fromRGB(255, 255, 255),
+		TitleText = Color3.fromRGB(255, 255, 255),
+		SelectedText = Color3.fromRGB(12, 12, 12),
+		Scroller = Color3.fromRGB(70, 130, 255)
+	},
+	Franklin = {
+		Accent = Color3.fromRGB(85, 205, 95),
+		Select = Color3.fromRGB(242, 242, 242),
+		Bg = Color3.fromRGB(8, 8, 8),
+		Text = Color3.fromRGB(255, 255, 255),
+		TitleText = Color3.fromRGB(255, 255, 255),
+		SelectedText = Color3.fromRGB(12, 12, 12),
+		Scroller = Color3.fromRGB(85, 205, 95)
+	},
+	Trevor = {
+		Accent = Color3.fromRGB(255, 145, 55),
+		Select = Color3.fromRGB(242, 242, 242),
+		Bg = Color3.fromRGB(8, 8, 8),
+		Text = Color3.fromRGB(255, 255, 255),
+		TitleText = Color3.fromRGB(255, 255, 255),
+		SelectedText = Color3.fromRGB(12, 12, 12),
+		Scroller = Color3.fromRGB(255, 145, 55)
+	},
+	Director = {
+		Accent = Color3.fromRGB(230, 188, 77),
+		Select = Color3.fromRGB(242, 242, 242),
+		Bg = Color3.fromRGB(8, 8, 8),
+		Text = Color3.fromRGB(255, 255, 255),
+		TitleText = Color3.fromRGB(255, 255, 255),
+		SelectedText = Color3.fromRGB(12, 12, 12),
+		Scroller = Color3.fromRGB(230, 188, 77)
+	}
+}
+
+local DEFAULTS = {
+	Theme = "GTA5",
+	Title = "INTERACTION MENU",
+	Tab = "HOME",
+	Size = UDim2.fromOffset(330, 505),
+	Position = UDim2.new(0.03, 0, 0.03, 0),
+	DisplayOrder = 2147483647,
+
+	Accent = Color3.fromRGB(60, 120, 255),
+	Select = Color3.fromRGB(242, 242, 242),
+	Bg = Color3.fromRGB(8, 8, 8),
+	Text = Color3.fromRGB(255, 255, 255),
+	TitleText = Color3.fromRGB(255, 255, 255),
+	SelectedText = Color3.fromRGB(12, 12, 12),
+	Scroller = Color3.fromRGB(60, 120, 255),
+
+	ScrollBarThickness = 4,
+	ScrollSmoothness = 4,
+
+	HeaderHeight = 84,
+	SubHeight = 24,
+	FooterHeight = 54,
+	RowHeight = 34,
+	RowGap = 0,
+	CornerRadius = 0,
+
+	UseSounds = true,
+	SoundVolume = 0.18,
+	SoundIds = {
+		Move = "rbxasset://sounds/clickfast.wav",
+		Change = "rbxasset://sounds/clickfast.wav",
+		Select = "rbxasset://sounds/button.wav",
+		Back = "rbxasset://sounds/button.wav",
+		Open = "rbxasset://sounds/electronicpingshort.wav",
+		Close = "rbxasset://sounds/electronicpingshort.wav",
+		Notify = "rbxasset://sounds/electronicpingshort.wav",
+		Error = "rbxasset://sounds/uuhhh.mp3"
+	},
+
+	NotificationDuration = 4,
+	NotificationWidth = 330
+}
+
+local function deriveTheme(opts)
+	opts.Select = opts.Select or Color3.fromRGB(242, 242, 242)
+	opts.Panel = opts.Panel or Color3.fromRGB(7, 7, 7)
+	opts.Panel2 = opts.Panel2 or Color3.fromRGB(18, 18, 18)
+	opts.Row = opts.Row or Color3.fromRGB(28, 28, 28)
+	opts.RowHover = opts.RowHover or Color3.fromRGB(42, 42, 42)
+	opts.RowSelected = opts.RowSelected or opts.Select
+	opts.Pill = opts.Pill or Color3.fromRGB(20, 20, 20)
+	opts.Stroke = opts.Stroke or Color3.fromRGB(70, 70, 70)
+	opts.MutedText = opts.MutedText or Color3.fromRGB(185, 185, 185)
+	opts.HeaderAccent2 = opts.HeaderAccent2 or smartShift(opts.Accent, 0.12)
+end
+
+local function buildOptions(userOpts)
+	local raw = cloneTable(userOpts or {})
+	local base = cloneTable(DEFAULTS)
+	local themeValue = raw.Theme
+	raw.Theme = nil
+
+	if typeof(themeValue) == "string" and PRESET_THEMES[themeValue] then
+		applyTable(base, PRESET_THEMES[themeValue])
+	elseif typeof(themeValue) == "table" then
+		applyTable(base, themeValue)
+	end
+
+	applyTable(base, raw)
+	base.Theme = typeof(themeValue) == "string" and themeValue or (typeof(themeValue) == "table" and "Custom" or base.Theme)
+	deriveTheme(base)
+
+	return base
+end
+
+GmmUI.PresetThemes = PRESET_THEMES
+
+GmmUI.GetThemeNames = function()
+	local names = {}
+	for _, name in ipairs(PRESET_THEME_ORDER) do
+		if PRESET_THEMES[name] then
+			table.insert(names, name)
+		end
+	end
+	return names
+end
+
+Menu.new = function(ui, name)
+	local self = setmetatable({}, Menu)
+	self.UI = ui
+	self.Name = gtaText(name or "MENU")
+	self.Items = {}
+	return self
+end
+
+Menu._addItem = function(self, item)
+	table.insert(self.Items, item)
+	return item
+end
+
+Menu.Clear = function(self)
+	self.Items = {}
+	if self.UI and self.UI.Current == self then
+		self.UI:_renderMenu(self)
+	end
+end
+
+Menu.Button = function(self, label, desc, callback)
+	return self:_addItem({
+		Type = "Button",
+		Label = tostring(label),
+		Desc = tostring(desc or ""),
+		Activate = function()
+			if typeof(callback) == "function" then
+				task.spawn(callback)
+			end
+		end
+	})
+end
+
+Menu.Toggle = function(self, label, desc, defaultValue, callback)
+	local state = defaultValue == true
+	return self:_addItem({
+		Type = "Toggle",
+		Label = tostring(label),
+		Desc = tostring(desc or ""),
+		Get = function()
+			return state
+		end,
+		Set = function(v)
+			state = v and true or false
+			if typeof(callback) == "function" then
+				task.spawn(callback, state)
+			end
+		end,
+		Left = function(it)
+			it.Set(not it.Get())
+		end,
+		Right = function(it)
+			it.Set(not it.Get())
+		end,
+		Activate = function(it)
+			it.Set(not it.Get())
+		end,
+		ValueText = function(it)
+			return it.Get() and "ON" or "OFF"
+		end
+	})
+end
+
+Menu.Slider = function(self, label, desc, min, max, step, defaultValue, callback)
+	min = tonumber(min) or 0
+	max = tonumber(max) or 100
+	step = tonumber(step) or 1
+
+	local value = tonumber(defaultValue)
+	if value == nil then
+		value = min
+	end
+	value = math.clamp(value, min, max)
+
+	local function set(v)
+		v = math.clamp(v, min, max)
+		local snapped = min + (math.floor(((v - min) / step) + 0.5) * step)
+		value = math.clamp(snapped, min, max)
+		if typeof(callback) == "function" then
+			task.spawn(callback, value)
+		end
+	end
+
+	return self:_addItem({
+		Type = "Slider",
+		Label = tostring(label),
+		Desc = tostring(desc or ""),
+		Get = function()
+			return value
+		end,
+		Set = set,
+		Left = function(it)
+			it.Set(it.Get() - step)
+		end,
+		Right = function(it)
+			it.Set(it.Get() + step)
+		end,
+		Activate = function()
+		end,
+		ValueText = function(it)
+			return tostring(it.Get())
+		end
+	})
+end
+
+Menu.List = function(self, label, desc, values, defaultIndex, callback)
+	values = typeof(values) == "table" and values or {}
+	local idx = tonumber(defaultIndex) or 1
+
+	if #values == 0 then
+		values = { "N/A" }
+		idx = 1
+	end
+
+	idx = math.clamp(idx, 1, #values)
+
+	local function setIndex(i)
+		idx = ((i - 1) % #values) + 1
+		if typeof(callback) == "function" then
+			task.spawn(callback, values[idx], idx)
+		end
+	end
+
+	return self:_addItem({
+		Type = "List",
+		Label = tostring(label),
+		Desc = tostring(desc or ""),
+		GetIndex = function()
+			return idx
+		end,
+		SetIndex = setIndex,
+		Left = function(it)
+			it.SetIndex(it.GetIndex() - 1)
+		end,
+		Right = function(it)
+			it.SetIndex(it.GetIndex() + 1)
+		end,
+		Activate = function(it)
+			it.SetIndex(it.GetIndex() + 1)
+		end,
+		ValueText = function()
+			return tostring(values[idx])
+		end
+	})
+end
+
+Menu.Submenu = function(self, label, desc, submenu)
+	assert(getmetatable(submenu) == Menu, "Submenu must be a Menu created by UI:NewMenu(...)")
+	return self:_addItem({
+		Type = "Submenu",
+		Label = tostring(label),
+		Desc = tostring(desc or ""),
+		HasArrow = true,
+		Activate = function()
+			self.UI:PushMenu(submenu)
+		end
+	})
+end
+
+GmmUI.new = function(userOpts)
+	local opts = buildOptions(userOpts)
+	local self = setmetatable({}, GmmUI)
+
+	self.Opts = opts
+	self.ThemeName = opts.Theme
+	self.Opened = true
+	self.MenuStack = {}
+	self.Current = nil
+	self.SelectedIndex = 0
+	self._connections = {}
+	self._rowObjects = {}
+	self._edit = nil
+	self._holdDir = nil
+	self._holdToken = 0
+	self._scrollTargetY = 0
+	self._notifications = {}
+	self._notifyCounter = 0
+
+	local gui = mk("ScreenGui", {
+		Name = "GmmUI",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = opts.DisplayOrder,
+		Parent = safeParentGui()
+	})
+	self.Gui = gui
+
+	self.Overlay = mk("Frame", {
+		Parent = gui,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+		BackgroundTransparency = 0.58,
+		BorderSizePixel = 0,
+		Active = true
+	})
+
+	self.NotifyHolder = mk("Frame", {
+		Parent = gui,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -18, 0, 18),
+		Size = UDim2.fromOffset(opts.NotificationWidth, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0
+	})
+
+	self.NotifyLayout = mk("UIListLayout", {
+		Parent = self.NotifyHolder,
+		Padding = UDim.new(0, 6),
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		SortOrder = Enum.SortOrder.LayoutOrder
+	})
+
+	self.Shadow = mk("Frame", {
+		Parent = gui,
+		Size = opts.Size,
+		Position = offsetUDim2(opts.Position, 4, 6),
+		BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+		BackgroundTransparency = 0.7,
+		BorderSizePixel = 0
+	})
+	addCorner(self.Shadow, opts.CornerRadius)
+
+	self.Main = mk("Frame", {
+		Name = "Main",
+		Parent = gui,
+		Size = opts.Size,
+		Position = opts.Position,
+		BackgroundColor3 = opts.Panel,
+		BackgroundTransparency = 0.06,
+		BorderSizePixel = 0,
+		ClipsDescendants = true,
+		Active = true
+	})
+	addCorner(self.Main, opts.CornerRadius)
+	self.MainStroke = addStroke(self.Main, opts.Stroke, 0.18, 1)
+
+	self.Scale = mk("UIScale", {
+		Parent = self.Main,
+		Scale = 1
+	})
+
+	self.Header = mk("Frame", {
+		Parent = self.Main,
+		Size = UDim2.new(1, 0, 0, opts.HeaderHeight),
+		BackgroundColor3 = opts.Accent,
+		BorderSizePixel = 0
+	})
+
+	self.HeaderGradient = mk("UIGradient", {
+		Parent = self.Header,
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, opts.HeaderAccent2),
+			ColorSequenceKeypoint.new(1, darken(opts.Accent, 0.18))
+		}),
+		Rotation = 90
+	})
+
+	self.HeaderTopLine = mk("Frame", {
+		Parent = self.Header,
+		Size = UDim2.new(1, 0, 0, 2),
+		BackgroundColor3 = lighten(opts.Accent, 0.2),
+		BackgroundTransparency = 0.15,
+		BorderSizePixel = 0
+	})
+
+	self.HeaderBottomLine = mk("Frame", {
+		Parent = self.Header,
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.new(1, 0, 0, 2),
+		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+		BackgroundTransparency = 0.9,
+		BorderSizePixel = 0
+	})
+
+	local titleWrap = mk("Frame", {
+		Parent = self.Header,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(12, 8),
+		Size = UDim2.new(1, -24, 1, -16)
+	})
+
+	self.TitleLabel = mk("TextLabel", {
+		Parent = titleWrap,
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Font = Enum.Font.ArialBold,
+		Text = gtaText(opts.Title),
+		TextColor3 = opts.TitleText or opts.Text,
+		TextSize = 30,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Center,
+		TextStrokeTransparency = 0.82,
+		TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+		TextTruncate = Enum.TextTruncate.AtEnd
+	})
+
+	self.Sub = mk("Frame", {
+		Parent = self.Main,
+		Position = UDim2.fromOffset(0, opts.HeaderHeight),
+		Size = UDim2.new(1, 0, 0, opts.SubHeight),
+		BackgroundColor3 = opts.Panel2,
+		BorderSizePixel = 0
+	})
+
+	self.TabLabel = mk("TextLabel", {
+		Parent = self.Sub,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(10, 0),
+		Size = UDim2.new(0.65, 0, 1, 0),
+		Font = Enum.Font.ArialBold,
+		Text = gtaText(opts.Tab),
+		TextColor3 = opts.Text,
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd
+	})
+
+	self.CounterWrap = mk("Frame", {
+		Parent = self.Sub,
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -8, 0.5, 0),
+		Size = UDim2.fromOffset(70, 18),
+		BackgroundColor3 = opts.Pill,
+		BorderSizePixel = 0
+	})
+	addCorner(self.CounterWrap, 0)
+	self.CounterStroke = addStroke(self.CounterWrap, opts.Stroke, 0.28, 1)
+
+	self.CounterLabel = mk("TextLabel", {
+		Parent = self.CounterWrap,
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Font = Enum.Font.ArialBold,
+		Text = "0 / 0",
+		TextColor3 = opts.Text,
+		TextSize = 12
+	})
+
+	local listTop = opts.HeaderHeight + opts.SubHeight
+	local listBottom = opts.FooterHeight
+
+	self.Scroll = mk("ScrollingFrame", {
+		Parent = self.Main,
+		Position = UDim2.fromOffset(0, listTop),
+		Size = UDim2.new(1, 0, 1, -(listTop + listBottom)),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = opts.ScrollBarThickness,
+		ScrollBarImageColor3 = opts.Scroller or opts.Accent,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollingEnabled = true,
+		Active = true,
+		VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+	})
+	addPadding(self.Scroll, 0, 4, 0, 0)
+
+	self.Layout = mk("UIListLayout", {
+		Parent = self.Scroll,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, opts.RowGap)
+	})
+
+	self.Footer = mk("Frame", {
+		Parent = self.Main,
+		Position = UDim2.new(0, 0, 1, -opts.FooterHeight),
+		Size = UDim2.new(1, 0, 0, opts.FooterHeight),
+		BackgroundColor3 = opts.Panel2,
+		BorderSizePixel = 0
+	})
+	addCorner(self.Footer, 0)
+	self.FooterStroke = addStroke(self.Footer, opts.Stroke, 0.24, 1)
+
+	self.FooterAccent = mk("Frame", {
+		Parent = self.Footer,
+		Size = UDim2.new(0, 4, 1, 0),
+		BackgroundColor3 = opts.Accent,
+		BorderSizePixel = 0
+	})
+
+	self.DescLabel = mk("TextLabel", {
+		Parent = self.Footer,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(10, 6),
+		Size = UDim2.new(1, -20, 0, 24),
+		Font = Enum.Font.Arial,
+		Text = "Select an option.",
+		TextColor3 = opts.Text,
+		TextSize = 12,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top
+	})
+
+	self.HintLabel = mk("TextLabel", {
+		Parent = self.Footer,
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 10, 1, -4),
+		Size = UDim2.new(1, -20, 0, 14),
+		Font = Enum.Font.ArialBold,
+		Text = "ENTER SELECT   LEFT/RIGHT CHANGE   BACKSPACE BACK",
+		TextColor3 = opts.MutedText,
+		TextSize = 10,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd
+	})
+
+	self:_rebuildSounds()
+
+	self._casActions = {
+		"GmmUI_Toggle",
+		"GmmUI_Up",
+		"GmmUI_Down",
+		"GmmUI_Left",
+		"GmmUI_Right",
+		"GmmUI_PageUp",
+		"GmmUI_PageDown",
+		"GmmUI_Back",
+		"GmmUI_Select"
+	}
+
+	for _, name in ipairs(self._casActions) do
+		pcall(function()
+			ContextActionService:UnbindAction(name)
+		end)
+	end
+
+	local actionPriority = (opts.InputPriority ~= nil and tonumber(opts.InputPriority)) or (Enum.ContextActionPriority.High.Value + 5000)
+
+	local function bind(actionName, fn, ...)
+		ContextActionService:BindActionAtPriority(actionName, fn, false, actionPriority, ...)
+	end
+
+	bind("GmmUI_Toggle", function(_, state)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		self:Toggle()
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.F4, Enum.KeyCode.Insert)
+
+	bind("GmmUI_Up", function(_, state)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		if not self.Opened then
+			return Enum.ContextActionResult.Pass
+		end
+		if self._edit then
+			return Enum.ContextActionResult.Sink
+		end
+		self:SetSelected(self.SelectedIndex - 1)
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.Up, Enum.KeyCode.KeypadEight, Enum.KeyCode.I)
+
+	bind("GmmUI_Down", function(_, state)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		if not self.Opened then
+			return Enum.ContextActionResult.Pass
+		end
+		if self._edit then
+			return Enum.ContextActionResult.Sink
+		end
+		self:SetSelected(self.SelectedIndex + 1)
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.Down, Enum.KeyCode.KeypadTwo, Enum.KeyCode.K)
+
+	bind("GmmUI_Left", function(_, state)
+		if not self.Opened then
+			return Enum.ContextActionResult.Pass
+		end
+		if state == Enum.UserInputState.Begin then
+			self:DoLeft()
+			self:_startHold(-1)
+			return Enum.ContextActionResult.Sink
+		elseif state == Enum.UserInputState.End then
+			self:_stopHold(-1)
+			return Enum.ContextActionResult.Sink
+		end
+		return Enum.ContextActionResult.Pass
+	end, Enum.KeyCode.Left, Enum.KeyCode.KeypadFour, Enum.KeyCode.J)
+
+	bind("GmmUI_Right", function(_, state)
+		if not self.Opened then
+			return Enum.ContextActionResult.Pass
+		end
+		if state == Enum.UserInputState.Begin then
+			self:DoRight()
+			self:_startHold(1)
+			return Enum.ContextActionResult.Sink
+		elseif state == Enum.UserInputState.End then
+			self:_stopHold(1)
+			return Enum.ContextActionResult.Sink
+		end
+		return Enum.ContextActionResult.Pass
+	end, Enum.KeyCode.Right, Enum.KeyCode.KeypadSix, Enum.KeyCode.L)
+
+	bind("GmmUI_PageUp", function(_, state)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		if not self.Opened then
+			return Enum.ContextActionResult.Pass
+		end
+		if self._edit then
+			return Enum.ContextActionResult.Sink
+		end
+		self:SetSelected(self.SelectedIndex - 10)
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.PageUp, Enum.KeyCode.KeypadNine)
+
+	bind("GmmUI_PageDown", function(_, state)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		if not self.Opened then
+			return Enum.ContextActionResult.Pass
+		end
+		if self._edit then
+			return Enum.ContextActionResult.Sink
+		end
+		self:SetSelected(self.SelectedIndex + 10)
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.PageDown, Enum.KeyCode.KeypadThree)
+
+	bind("GmmUI_Back", function(_, state)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		if not self.Opened then
+			return Enum.ContextActionResult.Pass
+		end
+		if self._edit then
+			self:CancelEdit()
+		else
+			self:Back()
+		end
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.Backspace, Enum.KeyCode.KeypadZero, Enum.KeyCode.U)
+
+	bind("GmmUI_Select", function(_, state)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		if not self.Opened then
+			return Enum.ContextActionResult.Pass
+		end
+		self:Select()
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.Return, Enum.KeyCode.KeypadFive, Enum.KeyCode.O)
+
+	return self
+end
+
+GmmUI._rebuildSounds = function(self)
+	if self.SoundFolder then
+		self.SoundFolder:Destroy()
+		self.SoundFolder = nil
+	end
+
+	self.Sounds = {}
+	self.SoundFolder = mk("Folder", {
+		Name = "GmmUI_Sounds",
+		Parent = SoundService
+	})
+
+	for name, id in pairs(self.Opts.SoundIds or {}) do
+		if tostring(id or "") ~= "" then
+			self.Sounds[name] = mk("Sound", {
+				Name = name,
+				Parent = self.SoundFolder,
+				SoundId = tostring(id),
+				Volume = tonumber(self.Opts.SoundVolume) or 0.18
+			})
+		end
+	end
+end
+
+GmmUI._playSound = function(self, name)
+	if not self.Opts.UseSounds then
+		return
+	end
+
+	local template = self.Sounds and self.Sounds[name]
+	if not template then
+		return
+	end
+
+	local sound = template:Clone()
+	sound.Parent = self.SoundFolder
+	sound.Volume = tonumber(self.Opts.SoundVolume) or sound.Volume
+
+	pcall(function()
+		sound:Play()
+	end)
+
+	sound.Ended:Connect(function()
+		if sound then
+			sound:Destroy()
+		end
+	end)
+
+	task.delay(5, function()
+		if sound and sound.Parent then
+			sound:Destroy()
+		end
+	end)
+end
+
+GmmUI.EnableSounds = function(self, enabled)
+	self.Opts.UseSounds = enabled and true or false
+end
+
+GmmUI.SetSoundVolume = function(self, volume)
+	self.Opts.SoundVolume = math.clamp(tonumber(volume) or self.Opts.SoundVolume or 0.18, 0, 1)
+	for _, template in pairs(self.Sounds or {}) do
+		template.Volume = self.Opts.SoundVolume
+	end
+end
+
+GmmUI.NewMenu = function(self, name)
+	return Menu.new(self, name)
+end
+
+GmmUI.SetTitle = function(self, text)
+	self.TitleLabel.Text = gtaText(text)
+end
+
+GmmUI.SetTab = function(self, text)
+	self.TabLabel.Text = gtaText(text)
+end
+
+GmmUI._updateCounter = function(self)
+	local total = (self.Current and #self.Current.Items) or 0
+	local sel = (total > 0 and math.clamp(self.SelectedIndex, 1, total)) or 0
+	self.CounterLabel.Text = string.format("%d / %d", sel, total)
+end
+
+GmmUI._saveMenuState = function(self)
+	local menu = self.Current
+	if not menu then
+		return
+	end
+
+	menu._savedIndex = tonumber(self.SelectedIndex) or 0
+
+	if self.Scroll then
+		local y = self._scrollTargetY ~= nil and self._scrollTargetY or self.Scroll.CanvasPosition.Y
+		menu._savedCanvasY = tonumber(y) or 0
+	end
+end
+
+GmmUI._clearRows = function(self)
+	for _, row in ipairs(self._rowObjects) do
+		if row and row.Destroy then
+			row:Destroy()
+		end
+	end
+	self._rowObjects = {}
+end
+
+GmmUI._notificationColor = function(self, kind)
+	if typeof(kind) == "Color3" then
+		return kind
+	end
+
+	local lower = string.lower(tostring(kind or "info"))
+	if lower == "success" then
+		return Color3.fromRGB(80, 190, 110)
+	elseif lower == "warning" then
+		return Color3.fromRGB(255, 170, 35)
+	elseif lower == "error" then
+		return Color3.fromRGB(255, 74, 74)
+	end
+
+	return self.Opts.Accent
+end
+
+GmmUI._restyleNotifications = function(self)
+	for i = #self._notifications, 1, -1 do
+		local data = self._notifications[i]
+		if not data.Frame or data.Frame.Parent == nil then
+			table.remove(self._notifications, i)
+		else
+			local accent = self:_notificationColor(data.Kind)
+			data.Frame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+			data.Stroke.Color = self.Opts.Stroke
+			data.TopLine.BackgroundColor3 = accent
+			data.Title.TextColor3 = self.Opts.Text
+			data.Body.TextColor3 = self.Opts.Text
+			data.Close.TextColor3 = self.Opts.MutedText
+			data.Accent.BackgroundColor3 = accent
+			data.LifeBack.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+			data.Life.BackgroundColor3 = accent
+		end
+	end
+end
+
+GmmUI.Notify = function(self, title, text, duration, kind)
+	if text == nil then
+		text = tostring(title or "")
+		title = "NOTICE"
+	end
+
+	title = gtaText(title or "NOTICE")
+	text = tostring(text or "")
+	duration = tonumber(duration) or self.Opts.NotificationDuration or 4
+	kind = kind or "Info"
+
+	local accent = self:_notificationColor(kind)
+	self._notifyCounter = self._notifyCounter + 1
+
+	local note = mk("Frame", {
+		Parent = self.NotifyHolder,
+		LayoutOrder = -self._notifyCounter,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundColor3 = Color3.fromRGB(10, 10, 10),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ClipsDescendants = true
+	})
+
+	local noteStroke = addStroke(note, self.Opts.Stroke, 1, 1)
+
+	local topLine = mk("Frame", {
+		Parent = note,
+		Size = UDim2.new(1, 0, 0, 2),
+		BackgroundColor3 = accent,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0
+	})
+
+	local accentBar = mk("Frame", {
+		Parent = note,
+		Size = UDim2.new(0, 4, 1, 0),
+		BackgroundColor3 = accent,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0
+	})
+
+	local closeButton = mk("TextButton", {
+		Parent = note,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -8, 0, 6),
+		Size = UDim2.fromOffset(18, 18),
+		BackgroundTransparency = 1,
+		Text = "X",
+		Font = Enum.Font.ArialBold,
+		TextSize = 12,
+		TextColor3 = self.Opts.MutedText,
+		TextTransparency = 1,
+		AutoButtonColor = false
+	})
+
+	local content = mk("Frame", {
+		Parent = note,
+		Position = UDim2.fromOffset(12, 8),
+		Size = UDim2.new(1, -32, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1
+	})
+
+	mk("UIListLayout", {
+		Parent = content,
+		Padding = UDim.new(0, 3),
+		SortOrder = Enum.SortOrder.LayoutOrder
+	})
+
+	local titleLabel = mk("TextLabel", {
+		Parent = content,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Font = Enum.Font.ArialBold,
+		Text = title,
+		TextColor3 = self.Opts.Text,
+		TextTransparency = 1,
+		TextSize = 14,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top
+	})
+
+	local bodyLabel = mk("TextLabel", {
+		Parent = content,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Font = Enum.Font.Arial,
+		Text = text,
+		TextColor3 = self.Opts.Text,
+		TextTransparency = 1,
+		TextSize = 13,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top
+	})
+
+	local lifeBack = mk("Frame", {
+		Parent = note,
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.new(1, 0, 0, 3),
+		BackgroundColor3 = Color3.fromRGB(55, 55, 55),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0
+	})
+
+	local life = mk("Frame", {
+		Parent = lifeBack,
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = accent,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0
+	})
+
+	local data = {
+		Frame = note,
+		Stroke = noteStroke,
+		TopLine = topLine,
+		Title = titleLabel,
+		Body = bodyLabel,
+		Close = closeButton,
+		Accent = accentBar,
+		LifeBack = lifeBack,
+		Life = life,
+		Kind = kind
+	}
+	table.insert(self._notifications, data)
+
+	local closed = false
+	local function dismiss()
+		if closed then
+			return
+		end
+		closed = true
+
+		tween(note, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1
+		})
+		tween(noteStroke, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+			Transparency = 1
+		})
+		tween(topLine, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1
+		})
+		tween(accentBar, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1
+		})
+		tween(titleLabel, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+			TextTransparency = 1
+		})
+		tween(bodyLabel, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+			TextTransparency = 1
+		})
+		tween(closeButton, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+			TextTransparency = 1
+		})
+		tween(lifeBack, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1
+		})
+		tween(life, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1
+		})
+
+		task.delay(0.14, function()
+			for i = #self._notifications, 1, -1 do
+				if self._notifications[i] == data then
+					table.remove(self._notifications, i)
+					break
+				end
+			end
+			if note then
+				note:Destroy()
+			end
+		end)
+	end
+
+	closeButton.MouseEnter:Connect(function()
+		closeButton.TextColor3 = self.Opts.Text
+	end)
+
+	closeButton.MouseLeave:Connect(function()
+		closeButton.TextColor3 = self.Opts.MutedText
+	end)
+
+	closeButton.MouseButton1Click:Connect(dismiss)
+
+	tween(note, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0.14
+	})
+	tween(noteStroke, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		Transparency = 0.3
+	})
+	tween(topLine, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0
+	})
+	tween(accentBar, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0
+	})
+	tween(titleLabel, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		TextTransparency = 0
+	})
+	tween(bodyLabel, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		TextTransparency = 0
+	})
+	tween(closeButton, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		TextTransparency = 0
+	})
+	tween(lifeBack, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0
+	})
+	tween(life, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0
+	})
+
+	tween(life, TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0, 0, 1, 0)
+	})
+
+	if string.lower(tostring(kind)) == "error" then
+		self:_playSound("Error")
+	else
+		self:_playSound("Notify")
+	end
+
+	task.delay(duration, dismiss)
+	return dismiss
+end
+
+GmmUI._applyTheme = function(self)
+	local opts = self.Opts
+
+	self.Main.BackgroundColor3 = opts.Panel
+	self.MainStroke.Color = opts.Stroke
+
+	self.Header.BackgroundColor3 = opts.Accent
+	self.HeaderGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, opts.HeaderAccent2),
+		ColorSequenceKeypoint.new(1, darken(opts.Accent, 0.18))
+	})
+
+	self.HeaderTopLine.BackgroundColor3 = lighten(opts.Accent, 0.2)
+	self.Sub.BackgroundColor3 = opts.Panel2
+	self.TitleLabel.TextColor3 = opts.TitleText or opts.Text
+	self.TabLabel.TextColor3 = opts.Text
+
+	self.CounterWrap.BackgroundColor3 = opts.Pill
+	self.CounterStroke.Color = opts.Stroke
+	self.CounterLabel.TextColor3 = opts.Text
+
+	self.Scroll.ScrollBarImageColor3 = opts.Scroller or opts.Accent
+
+	self.Footer.BackgroundColor3 = opts.Panel2
+	self.FooterStroke.Color = opts.Stroke
+	self.FooterAccent.BackgroundColor3 = opts.Accent
+	self.DescLabel.TextColor3 = opts.Text
+	self.HintLabel.TextColor3 = opts.MutedText
+
+	self.NotifyHolder.Size = UDim2.fromOffset(opts.NotificationWidth, 0)
+
+	self:_restyleNotifications()
+
+	if self.Current then
+		local current = self.Current
+		self:_renderMenu(current)
+	end
+end
+
+GmmUI.SetTheme = function(self, theme)
+	local newOpts = cloneTable(self.Opts)
+
+	if typeof(theme) == "string" then
+		assert(PRESET_THEMES[theme], "Unknown preset theme: " .. tostring(theme))
+		applyTable(newOpts, PRESET_THEMES[theme])
+		newOpts.Theme = theme
+		self.ThemeName = theme
+	elseif typeof(theme) == "table" then
+		applyTable(newOpts, theme)
+		newOpts.Theme = "Custom"
+		self.ThemeName = "Custom"
+	else
+		error("Theme must be a preset name or table")
+	end
+
+	deriveTheme(newOpts)
+	self.Opts = newOpts
+	self:_rebuildSounds()
+	self:_applyTheme()
+end
+
+GmmUI._makeRow = function(self, item, index)
+	local opts = self.Opts
+	local hasValue = item.ValueText ~= nil
+	local hasArrow = item.HasArrow or item.Type == "Submenu"
+
+	local row = mk("TextButton", {
+		Parent = self.Scroll,
+		Size = UDim2.new(1, 0, 0, opts.RowHeight),
+		BackgroundColor3 = opts.Row,
+		BackgroundTransparency = 0.12,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = ""
+	})
+
+	local rowStroke = addStroke(row, opts.Stroke, 0.82, 1)
+
+	local selectedBg = mk("Frame", {
+		Parent = row,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = opts.RowSelected,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0
+	})
+
+	mk("UIGradient", {
+		Parent = selectedBg,
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, lighten(opts.RowSelected, 0.01)),
+			ColorSequenceKeypoint.new(1, darken(opts.RowSelected, 0.08))
+		}),
+		Rotation = 90
+	})
+
+	local accentBar = mk("Frame", {
+		Parent = row,
+		Size = UDim2.new(0, 4, 1, 0),
+		BackgroundColor3 = opts.Accent,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0
+	})
+
+	mk("Frame", {
+		Parent = row,
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = opts.Stroke,
+		BackgroundTransparency = 0.45,
+		BorderSizePixel = 0
+	})
+
+	local left = mk("TextLabel", {
+		Parent = row,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(12, 0),
+		Size = UDim2.new(1, hasValue and -132 or (hasArrow and -30 or -16), 1, 0),
+		Font = Enum.Font.ArialBold,
+		Text = gtaText(item.Label),
+		TextColor3 = opts.Text,
+		TextSize = 16,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd
+	})
+
+	local valueButton
+	local valueStroke
+	local right
+
+	if hasValue then
+		valueButton = mk("TextButton", {
+			Parent = row,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, hasArrow and -26 or -8, 0.5, 0),
+			Size = UDim2.fromOffset(96, opts.RowHeight - 8),
+			BackgroundColor3 = opts.Pill,
+			BorderSizePixel = 0,
+			AutoButtonColor = false,
+			Text = ""
+		})
+		addCorner(valueButton, 0)
+		valueStroke = addStroke(valueButton, opts.Stroke, 0.35, 1)
+
+		right = mk("TextLabel", {
+			Parent = valueButton,
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(4, 0),
+			Size = UDim2.new(1, -8, 1, 0),
+			Font = Enum.Font.ArialBold,
+			Text = "",
+			TextColor3 = opts.Text,
+			TextSize = 14,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			TextTruncate = Enum.TextTruncate.AtEnd
+		})
+	end
+
+	local arrow = mk("TextLabel", {
+		Parent = row,
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -8, 0.5, 0),
+		Size = UDim2.fromOffset(14, 14),
+		Font = Enum.Font.ArialBold,
+		Text = ">",
+		TextColor3 = opts.MutedText,
+		TextSize = 18,
+		Visible = hasArrow
+	})
+
+	local selected = false
+	local hovered = false
+
+	local function valueBg()
+		if selected then
+			return Color3.fromRGB(235, 235, 235)
+		end
+
+		if item.Type == "Toggle" and item.Get and item.Get() then
+			return opts.Accent
+		end
+
+		if item.Type == "Slider" and self._edit and self._edit.Item == item then
+			return mix(opts.Accent, opts.Pill, 0.2)
+		end
+
+		return opts.Pill
+	end
+
+	local function valueTextColor()
+		if selected then
+			return opts.SelectedText or Color3.fromRGB(12, 12, 12)
+		end
+
+		if item.Type == "Toggle" and item.Get and item.Get() then
+			return Color3.fromRGB(255, 255, 255)
+		end
+
+		return opts.Text
+	end
+
+	local function updateValueText()
+		if not right then
+			return
+		end
+
+		local value = gtaText(item:ValueText())
+
+		if item.Type == "Slider" and self._edit and self._edit.Item == item then
+			right.Text = "< " .. value .. " >"
+		elseif item.Type == "List" and selected then
+			right.Text = "< " .. value .. " >"
+		else
+			right.Text = value
+		end
+	end
+
+	local function applyVisuals(animated)
+		local rowColor = hovered and opts.RowHover or opts.Row
+		local textColor = selected and (opts.SelectedText or Color3.fromRGB(12, 12, 12)) or opts.Text
+		local arrowColor = selected and textColor or opts.MutedText
+
+		if animated then
+			tween(row, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+				BackgroundColor3 = rowColor
+			})
+			tween(selectedBg, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+				BackgroundTransparency = selected and 0 or 1
+			})
+			tween(accentBar, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+				BackgroundTransparency = selected and 0 or 1
+			})
+			tween(rowStroke, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+				Color = selected and opts.Accent or opts.Stroke,
+				Transparency = selected and 0.4 or 0.82
+			})
+		else
+			row.BackgroundColor3 = rowColor
+			selectedBg.BackgroundTransparency = selected and 0 or 1
+			accentBar.BackgroundTransparency = selected and 0 or 1
+			rowStroke.Color = selected and opts.Accent or opts.Stroke
+			rowStroke.Transparency = selected and 0.4 or 0.82
+		end
+
+		left.TextColor3 = textColor
+		arrow.TextColor3 = arrowColor
+
+		if right then
+			right.TextColor3 = valueTextColor()
+			valueButton.BackgroundColor3 = valueBg()
+			valueStroke.Color = selected and opts.Accent or opts.Stroke
+		end
+	end
+
+	local function refreshValue()
+		updateValueText()
+		applyVisuals(false)
+	end
+
+	local function setSelected(on)
+		selected = on == true
+		updateValueText()
+		applyVisuals(true)
+	end
+
+	refreshValue()
+
+	row.MouseEnter:Connect(function()
+		hovered = true
+		applyVisuals(true)
+	end)
+
+	row.MouseLeave:Connect(function()
+		hovered = false
+		applyVisuals(true)
+	end)
+
+	row.MouseButton1Click:Connect(function()
+		if not self.Opened then
+			return
+		end
+		if self._edit and self._edit.Item ~= item then
+			return
+		end
+		self:SetSelected(index, true)
+		self:Select()
+	end)
+
+	if valueButton then
+		valueButton.MouseEnter:Connect(function()
+			hovered = true
+			applyVisuals(true)
+		end)
+
+		valueButton.MouseLeave:Connect(function()
+			hovered = false
+			applyVisuals(true)
+		end)
+
+		valueButton.MouseButton1Down:Connect(function(x)
+			if not self.Opened then
+				return
+			end
+			if self._edit and self._edit.Item ~= item then
+				return
+			end
+
+			self:SetSelected(index, true)
+
+			local mid = valueButton.AbsolutePosition.X + (valueButton.AbsoluteSize.X / 2)
+			local dir = (x < mid) and -1 or 1
+
+			if item.Type == "Slider" then
+				if not (self._edit and self._edit.Item == item) then
+					self:BeginEdit()
+				end
+				if dir < 0 then
+					self:DoLeft()
+				else
+					self:DoRight()
+				end
+			elseif item.Type == "List" or item.Type == "Toggle" then
+				if dir < 0 then
+					self:DoLeft()
+				else
+					self:DoRight()
+				end
+			else
+				self:Select()
+			end
+		end)
+	end
+
+	return row, setSelected, refreshValue
+end
+
+GmmUI._renderMenu = function(self, menu)
+	self:_clearRows()
+	self.Current = menu
+	self:SetTab(menu.Name)
+
+	for i, item in ipairs(menu.Items) do
+		local row, setSelected, refreshValue = self:_makeRow(item, i)
+		item.__row = row
+		item.__setSelected = setSelected
+		item.__refreshValue = refreshValue
+		table.insert(self._rowObjects, row)
+	end
+
+	if #menu.Items > 0 then
+		local savedY = tonumber(menu._savedCanvasY) or 0
+
+		if self._scrollTween then
+			pcall(function()
+				self._scrollTween:Cancel()
+			end)
+			self._scrollTween = nil
+		end
+
+		self.Scroll.CanvasPosition = Vector2.new(0, savedY)
+		self._scrollTargetY = savedY
+
+		local savedIdx = tonumber(menu._savedIndex)
+		if not (savedIdx and savedIdx >= 1 and savedIdx <= #menu.Items) then
+			savedIdx = 1
+		end
+
+		self:SetSelected(savedIdx, true)
+	else
+		self.SelectedIndex = 0
+		self.DescLabel.Text = "No options."
+		self:_updateCounter()
+	end
+end
+
+GmmUI.PushMenu = function(self, menu)
+	self:_saveMenuState()
+	table.insert(self.MenuStack, menu)
+	self:_renderMenu(menu)
+end
+
+GmmUI.Back = function(self)
+	if self._edit then
+		self:CancelEdit()
+		return
+	end
+
+	if #self.MenuStack <= 1 then
+		self:Close()
+		return
+	end
+
+	self:_playSound("Back")
+	self:_saveMenuState()
+	table.remove(self.MenuStack, #self.MenuStack)
+	local top = self.MenuStack[#self.MenuStack]
+	self:_renderMenu(top)
+end
+
+GmmUI._scrollTo = function(self, targetY)
+	local scroll = self.Scroll
+	if not scroll then
+		return
+	end
+
+	targetY = tonumber(targetY) or 0
+	self._scrollTargetY = targetY
+
+	local absCanvasY = scroll.AbsoluteCanvasSize.Y
+	local maxY = (absCanvasY > 0) and math.max(0, absCanvasY - scroll.AbsoluteSize.Y) or math.huge
+	targetY = math.clamp(targetY, 0, maxY)
+
+	if self._scrollTween then
+		pcall(function()
+			self._scrollTween:Cancel()
+		end)
+		self._scrollTween = nil
+	end
+
+	local smoothness = tonumber(self.Opts and self.Opts.ScrollSmoothness) or 0
+	if smoothness <= 0 then
+		scroll.CanvasPosition = Vector2.new(0, targetY)
+		self._scrollTargetY = targetY
+		return
+	end
+
+	local duration = math.clamp(0.04 * smoothness, 0.05, 0.3)
+	self._scrollTween = tween(scroll, TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		CanvasPosition = Vector2.new(0, targetY)
+	})
+end
+
+GmmUI.SetSelected = function(self, idx, silent)
+	if not self.Current then
+		return
+	end
+
+	local items = self.Current.Items
+	if #items == 0 then
+		return
+	end
+
+	local previous = self.SelectedIndex
+	idx = ((idx - 1) % #items) + 1
+	self.SelectedIndex = idx
+
+	for i, it in ipairs(items) do
+		if it.__setSelected then
+			it.__setSelected(i == idx)
+		end
+	end
+
+	local it = items[idx]
+	self.DescLabel.Text = (it and it.Desc and it.Desc ~= "" and it.Desc) or "Select an option."
+	self:_updateCounter()
+
+	local row = it and it.__row
+	if row then
+		local margin = 4
+		local y = row.AbsolutePosition.Y
+		local h = row.AbsoluteSize.Y
+		local topY = self.Scroll.AbsolutePosition.Y
+		local botY = topY + self.Scroll.AbsoluteSize.Y
+
+		if y < (topY + margin) then
+			self:_scrollTo(self.Scroll.CanvasPosition.Y - ((topY + margin) - y))
+		elseif (y + h) > (botY - margin) then
+			self:_scrollTo(self.Scroll.CanvasPosition.Y + ((y + h) - (botY - margin)))
+		end
+	end
+
+	self:_saveMenuState()
+
+	if not silent and previous ~= idx and self.Opened then
+		self:_playSound("Move")
+	end
+end
+
+GmmUI._getSelectedItem = function(self)
+	if not self.Current then
+		return nil
+	end
+	return self.Current.Items[self.SelectedIndex]
+end
+
+GmmUI._stopHold = function(self, dir)
+	if dir == nil or self._holdDir == dir then
+		self._holdDir = nil
+		self._holdToken = (self._holdToken or 0) + 1
+	end
+end
+
+GmmUI._startHold = function(self, dir)
+	local it = self._edit and self._edit.Item
+	if not (self.Opened and it and it == self:_getSelectedItem() and it.Type == "Slider") then
+		return
+	end
+
+	self._holdDir = dir
+	self._holdToken = (self._holdToken or 0) + 1
+	local token = self._holdToken
+
+	task.spawn(function()
+		task.wait(0.35)
+		while self._holdToken == token and self._holdDir == dir do
+			if not self.Opened then
+				break
+			end
+			if not self._edit or self._edit.Item ~= it then
+				break
+			end
+
+			if dir < 0 then
+				self:DoLeft()
+			else
+				self:DoRight()
+			end
+
+			task.wait(0.05)
+		end
+	end)
+end
+
+GmmUI.BeginEdit = function(self)
+	if self._edit then
+		return
+	end
+
+	local it = self:_getSelectedItem()
+	if not it or it.Type ~= "Slider" then
+		return
+	end
+
+	self._edit = {
+		Item = it,
+		Original = (it.Get and it.Get()) or nil
+	}
+
+	if it.__refreshValue then
+		it.__refreshValue()
+	end
+
+	self:_playSound("Select")
+end
+
+GmmUI.ConfirmEdit = function(self)
+	if not self._edit then
+		return
+	end
+
+	local it = self._edit.Item
+	self._edit = nil
+	self:_stopHold()
+
+	if it and it.__refreshValue then
+		it.__refreshValue()
+	end
+
+	self:_playSound("Select")
+end
+
+GmmUI.CancelEdit = function(self)
+	if not self._edit then
+		return
+	end
+
+	local it = self._edit.Item
+	local original = self._edit.Original
+	self._edit = nil
+	self:_stopHold()
+
+	if it and original ~= nil and it.Set then
+		it.Set(original)
+	end
+
+	if it and it.__refreshValue then
+		it.__refreshValue()
+	end
+
+	self:_playSound("Back")
+end
+
+GmmUI.DoLeft = function(self)
+	local it = self:_getSelectedItem()
+	if not it then
+		return
+	end
+
+	if it.Type == "Slider" then
+		if not (self._edit and self._edit.Item == it) then
+			return
+		end
+	end
+
+	if it.Left then
+		it:Left()
+		if it.__refreshValue then
+			it.__refreshValue()
+		end
+		self:_playSound("Change")
+	end
+end
+
+GmmUI.DoRight = function(self)
+	local it = self:_getSelectedItem()
+	if not it then
+		return
+	end
+
+	if it.Type == "Slider" then
+		if not (self._edit and self._edit.Item == it) then
+			return
+		end
+	end
+
+	if it.Right then
+		it:Right()
+		if it.__refreshValue then
+			it.__refreshValue()
+		end
+		self:_playSound("Change")
+	end
+end
+
+GmmUI.Select = function(self)
+	local it = self:_getSelectedItem()
+	if not it then
+		return
+	end
+
+	if it.Type == "Slider" then
+		if self._edit and self._edit.Item == it then
+			self:ConfirmEdit()
+		else
+			self:BeginEdit()
+		end
+		return
+	end
+
+	if it.Type == "Toggle" or it.Type == "List" then
+		self:_playSound("Change")
+	else
+		self:_playSound("Select")
+	end
+
+	if it.Activate then
+		it:Activate()
+		if it.__refreshValue then
+			it.__refreshValue()
+		end
+	end
+end
+
+GmmUI.Open = function(self)
+	if self.Opened then
+		return
+	end
+
+	self.Opened = true
+	self.Overlay.Visible = true
+	self.Shadow.Visible = true
+	self.Main.Visible = true
+
+	self.Overlay.BackgroundTransparency = 1
+	self.Shadow.BackgroundTransparency = 1
+	self.Scale.Scale = 0.985
+	self.Main.BackgroundTransparency = 0.16
+
+	tween(self.Overlay, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0.58
+	})
+	tween(self.Shadow, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0.7
+	})
+	tween(self.Scale, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		Scale = 1
+	})
+	tween(self.Main, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0.06
+	})
+
+	self:_playSound("Open")
+end
+
+GmmUI.Close = function(self)
+	if not self.Opened then
+		return
+	end
+
+	if self._edit then
+		self:ConfirmEdit()
+	else
+		self:_stopHold()
+	end
+
+	self.Opened = false
+	self:_playSound("Close")
+
+	local a = tween(self.Overlay, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+		BackgroundTransparency = 1
+	})
+	tween(self.Shadow, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+		BackgroundTransparency = 1
+	})
+	tween(self.Scale, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+		Scale = 0.985
+	})
+	tween(self.Main, TweenInfo.new(0.12, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+		BackgroundTransparency = 0.16
+	})
+
+	a.Completed:Connect(function()
+		if not self.Opened then
+			self.Overlay.Visible = false
+			self.Shadow.Visible = false
+			self.Main.Visible = false
+		end
+	end)
+end
+
+GmmUI.Toggle = function(self)
+	if self.Opened then
+		self:Close()
+	else
+		self:Open()
+	end
+end
+
+GmmUI.Destroy = function(self)
+	for _, c in ipairs(self._connections) do
+		pcall(function()
+			c:Disconnect()
+		end)
+	end
+	self._connections = {}
+
+	if self._casActions then
+		for _, name in ipairs(self._casActions) do
+			pcall(function()
+				ContextActionService:UnbindAction(name)
+			end)
+		end
+		self._casActions = nil
+	end
+
+	if self.SoundFolder then
+		self.SoundFolder:Destroy()
+		self.SoundFolder = nil
+	end
+
+	if self.Gui then
+		self.Gui:Destroy()
+	end
+end
+
+return GmmUI
