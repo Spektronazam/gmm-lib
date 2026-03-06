@@ -1,0 +1,467 @@
+local GmmUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Spektronazam/gmm-lib/refs/heads/main/source?t=" .. tick()))()
+
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+local function getCharacter()
+	return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+
+local function getHumanoid()
+	local character = getCharacter()
+	return character and character:FindFirstChildOfClass("Humanoid")
+end
+
+local function getRootPart()
+	local character = getCharacter()
+	return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local Settings = {
+	GodMode = false,
+	SuperJump = false,
+	FastWalk = false,
+	FastWalkSpeed = 16,
+	Invisible = false,
+	FreezeTime = false,
+	FrozenTime = 12,
+	CurrentTheme = "GTA5",
+	SavedLocations = {}
+}
+
+local DefaultLighting = {
+	Brightness = Lighting.Brightness,
+	Ambient = Lighting.Ambient,
+	OutdoorAmbient = Lighting.OutdoorAmbient,
+	FogEnd = Lighting.FogEnd,
+	FogStart = Lighting.FogStart,
+	FogColor = Lighting.FogColor
+}
+
+local ui
+local freezeConnection
+
+local function notify(title, text, duration, kind)
+	if ui then
+		ui:Notify(title, text, duration, kind)
+	end
+end
+
+local function healPlayer()
+	local humanoid = getHumanoid()
+	if humanoid then
+		humanoid.Health = humanoid.MaxHealth
+	end
+end
+
+local function setGodMode(enabled)
+	Settings.GodMode = enabled
+	local humanoid = getHumanoid()
+	if humanoid then
+		if enabled then
+			humanoid.MaxHealth = math.huge
+			humanoid.Health = math.huge
+		else
+			humanoid.MaxHealth = 100
+			humanoid.Health = math.min(humanoid.Health, 100)
+		end
+	end
+end
+
+local function setSuperJump(enabled)
+	Settings.SuperJump = enabled
+	local humanoid = getHumanoid()
+	if humanoid then
+		if enabled then
+			humanoid.JumpPower = 120
+			humanoid.UseJumpPower = true
+		else
+			humanoid.JumpPower = 50
+			humanoid.UseJumpPower = true
+		end
+	end
+end
+
+local function setWalkSpeed(speed)
+	Settings.FastWalkSpeed = speed
+	local humanoid = getHumanoid()
+	if humanoid then
+		if Settings.FastWalk then
+			humanoid.WalkSpeed = speed
+		else
+			humanoid.WalkSpeed = 16
+		end
+	end
+end
+
+local function setFastWalk(enabled)
+	Settings.FastWalk = enabled
+	local humanoid = getHumanoid()
+	if humanoid then
+		humanoid.WalkSpeed = enabled and Settings.FastWalkSpeed or 16
+	end
+end
+
+local function setInvisible(enabled)
+	Settings.Invisible = enabled
+	local character = getCharacter()
+	if not character then
+		return
+	end
+
+	for _, obj in ipairs(character:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			obj.LocalTransparencyModifier = enabled and 1 or 0
+		elseif obj:IsA("Decal") then
+			obj.Transparency = enabled and 1 or 0
+		end
+	end
+end
+
+local function setTime(hour)
+	Settings.FrozenTime = hour
+	Lighting.ClockTime = hour
+end
+
+local function setFreezeTime(enabled)
+	Settings.FreezeTime = enabled
+
+	if freezeConnection then
+		freezeConnection:Disconnect()
+		freezeConnection = nil
+	end
+
+	if enabled then
+		Settings.FrozenTime = Lighting.ClockTime
+		freezeConnection = RunService.RenderStepped:Connect(function()
+			Lighting.ClockTime = Settings.FrozenTime
+		end)
+	end
+end
+
+local WeatherTypes = { "CLEAR", "FOGGY", "RAINY", "SUNSET", "NIGHT" }
+
+local function setWeather(weatherType)
+	Lighting.Brightness = DefaultLighting.Brightness
+	Lighting.Ambient = DefaultLighting.Ambient
+	Lighting.OutdoorAmbient = DefaultLighting.OutdoorAmbient
+	Lighting.FogEnd = DefaultLighting.FogEnd
+	Lighting.FogStart = DefaultLighting.FogStart
+	Lighting.FogColor = DefaultLighting.FogColor
+
+	if weatherType == "CLEAR" then
+		Lighting.Brightness = 2
+		Lighting.FogEnd = 100000
+	elseif weatherType == "FOGGY" then
+		Lighting.Brightness = 1.4
+		Lighting.FogStart = 0
+		Lighting.FogEnd = 220
+		Lighting.FogColor = Color3.fromRGB(200, 200, 200)
+	elseif weatherType == "RAINY" then
+		Lighting.Brightness = 0.7
+		Lighting.FogStart = 0
+		Lighting.FogEnd = 600
+		Lighting.Ambient = Color3.fromRGB(80, 80, 95)
+		Lighting.OutdoorAmbient = Color3.fromRGB(65, 65, 80)
+	elseif weatherType == "SUNSET" then
+		Lighting.ClockTime = 18.3
+		Lighting.Brightness = 1.7
+		Lighting.Ambient = Color3.fromRGB(255, 170, 120)
+	elseif weatherType == "NIGHT" then
+		Lighting.ClockTime = 0
+		Lighting.Brightness = 0.4
+		Lighting.Ambient = Color3.fromRGB(45, 45, 60)
+		Lighting.OutdoorAmbient = Color3.fromRGB(25, 25, 40)
+	end
+end
+
+local function setGravity(value)
+	Workspace.Gravity = value
+end
+
+local function teleportTo(position)
+	local rootPart = getRootPart()
+	if rootPart then
+		rootPart.CFrame = CFrame.new(position)
+	end
+end
+
+local function teleportToPlayer(playerName)
+	local targetPlayer = Players:FindFirstChild(playerName)
+	if not targetPlayer or not targetPlayer.Character then
+		notify("TELEPORT", "Player not found.", 2.5, "Error")
+		return
+	end
+
+	local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not targetRoot then
+		notify("TELEPORT", "Target has no root part.", 2.5, "Error")
+		return
+	end
+
+	teleportTo(targetRoot.Position + Vector3.new(3, 0, 0))
+	notify("TELEPORT", "Moved near " .. targetPlayer.Name .. ".", 2.5, "Success")
+end
+
+local function saveLocation(name)
+	local rootPart = getRootPart()
+	if not rootPart then
+		return
+	end
+
+	table.insert(Settings.SavedLocations, {
+		Name = name,
+		Position = rootPart.Position
+	})
+end
+
+local function applyCurrentCharacterState()
+	task.wait(0.75)
+	setGodMode(Settings.GodMode)
+	setSuperJump(Settings.SuperJump)
+	setFastWalk(Settings.FastWalk)
+	setWalkSpeed(Settings.FastWalkSpeed)
+	setInvisible(Settings.Invisible)
+end
+
+ui = GmmUI.new({
+	Title = "INTERACTION MENU",
+	Theme = "GTA5",
+	UseSounds = true,
+	SoundVolume = 0.18
+})
+
+local homeMenu = ui:NewMenu("HOME")
+local playerMenu = ui:NewMenu("PLAYER")
+local worldMenu = ui:NewMenu("WORLD")
+local teleportMenu = ui:NewMenu("TELEPORT")
+local settingsMenu = ui:NewMenu("SETTINGS")
+
+local timeMenu = ui:NewMenu("TIME")
+local weatherMenu = ui:NewMenu("WEATHER")
+local gravityMenu = ui:NewMenu("GRAVITY")
+local savedLocMenu = ui:NewMenu("SAVED LOCATIONS")
+local tpPlayerMenu = ui:NewMenu("PLAYER TELEPORT")
+local themeMenu = ui:NewMenu("STYLE")
+
+homeMenu:Submenu("Player Options", "Modify your character abilities.", playerMenu)
+homeMenu:Submenu("World Options", "Control the world around you.", worldMenu)
+homeMenu:Submenu("Teleport", "Move around the map quickly.", teleportMenu)
+homeMenu:Submenu("Settings", "Change menu style and sounds.", settingsMenu)
+
+playerMenu:Button("Heal Player", "Restore your current health.", function()
+	healPlayer()
+	notify("PLAYER", "Health restored.", 2, "Success")
+end)
+
+playerMenu:Toggle("God Mode", "Attempt to make the player invincible.", false, function(enabled)
+	setGodMode(enabled)
+	notify("PLAYER", "God Mode " .. (enabled and "enabled." or "disabled."), 2, enabled and "Success" or "Warning")
+end)
+
+playerMenu:Toggle("Super Jump", "Increase jump power.", false, function(enabled)
+	setSuperJump(enabled)
+	notify("PLAYER", "Super Jump " .. (enabled and "enabled." or "disabled."), 2, enabled and "Success" or "Warning")
+end)
+
+playerMenu:Toggle("Fast Walk", "Increase movement speed.", false, function(enabled)
+	setFastWalk(enabled)
+	notify("PLAYER", "Fast Walk " .. (enabled and "enabled." or "disabled."), 2, enabled and "Success" or "Warning")
+end)
+
+playerMenu:Slider("Walk Speed", "Adjust your walk speed.", 16, 120, 1, 16, function(speed)
+	setWalkSpeed(speed)
+end)
+
+playerMenu:Toggle("Invisible", "Hide your character locally.", false, function(enabled)
+	setInvisible(enabled)
+	notify("PLAYER", "Invisibility " .. (enabled and "enabled." or "disabled."), 2, enabled and "Success" or "Warning")
+end)
+
+worldMenu:Submenu("Time", "Set or freeze the time of day.", timeMenu)
+worldMenu:Submenu("Weather", "Choose a weather preset.", weatherMenu)
+worldMenu:Submenu("Gravity", "Adjust world gravity.", gravityMenu)
+
+timeMenu:Slider("Set Time", "Set the current clock time.", 0, 24, 0.5, 12, function(hour)
+	setTime(hour)
+end)
+
+timeMenu:Toggle("Freeze Time", "Lock time at the current value.", false, function(enabled)
+	setFreezeTime(enabled)
+	notify("WORLD", "Freeze Time " .. (enabled and "enabled." or "disabled."), 2, enabled and "Success" or "Warning")
+end)
+
+timeMenu:Button("Dawn 06:00", "Set time to dawn.", function()
+	setTime(6)
+	notify("TIME", "Set to dawn.", 2, "Success")
+end)
+
+timeMenu:Button("Noon 12:00", "Set time to noon.", function()
+	setTime(12)
+	notify("TIME", "Set to noon.", 2, "Success")
+end)
+
+timeMenu:Button("Dusk 18:00", "Set time to dusk.", function()
+	setTime(18)
+	notify("TIME", "Set to dusk.", 2, "Success")
+end)
+
+timeMenu:Button("Midnight 00:00", "Set time to midnight.", function()
+	setTime(0)
+	notify("TIME", "Set to midnight.", 2, "Success")
+end)
+
+weatherMenu:List("Weather Type", "Switch weather style.", WeatherTypes, 1, function(weather)
+	setWeather(weather)
+	notify("WEATHER", weather .. " applied.", 2, "Success")
+end)
+
+gravityMenu:Slider("Gravity", "Adjust the world's gravity.", 0, 400, 5, Workspace.Gravity, function(value)
+	setGravity(value)
+end)
+
+gravityMenu:Button("Normal Gravity", "Reset gravity to default.", function()
+	setGravity(196.2)
+	notify("WORLD", "Gravity reset.", 2, "Success")
+end)
+
+gravityMenu:Button("Moon Gravity", "Use lower gravity.", function()
+	setGravity(50)
+	notify("WORLD", "Moon gravity enabled.", 2, "Success")
+end)
+
+gravityMenu:Button("Zero Gravity", "Set gravity to zero.", function()
+	setGravity(0)
+	notify("WORLD", "Zero gravity enabled.", 2, "Warning")
+end)
+
+teleportMenu:Button("Spawn Point", "Teleport to SpawnLocation if it exists.", function()
+	local spawnLocation = Workspace:FindFirstChild("SpawnLocation")
+	if spawnLocation then
+		teleportTo(spawnLocation.Position + Vector3.new(0, 5, 0))
+		notify("TELEPORT", "Moved to spawn.", 2, "Success")
+	else
+		notify("TELEPORT", "No SpawnLocation found.", 2.5, "Error")
+	end
+end)
+
+teleportMenu:Button("Map Center", "Teleport to the map center.", function()
+	teleportTo(Vector3.new(0, 100, 0))
+	notify("TELEPORT", "Moved to map center.", 2, "Success")
+end)
+
+teleportMenu:Button("Sky Platform", "Teleport high into the air.", function()
+	local rootPart = getRootPart()
+	if rootPart then
+		teleportTo(rootPart.Position + Vector3.new(0, 300, 0))
+		notify("TELEPORT", "Moved to the sky.", 2, "Success")
+	end
+end)
+
+teleportMenu:Submenu("Saved Locations", "Teleport to saved positions.", savedLocMenu)
+teleportMenu:Submenu("Teleport To Player", "Move near another player.", tpPlayerMenu)
+
+settingsMenu:Submenu("Menu Style", "Change GTA inspired styles.", themeMenu)
+
+settingsMenu:Toggle("Menu Sounds", "Enable or disable UI sounds.", true, function(enabled)
+	ui:EnableSounds(enabled)
+	notify("SETTINGS", "Menu sounds " .. (enabled and "enabled." or "disabled."), 2, enabled and "Success" or "Warning")
+end)
+
+settingsMenu:Slider("Sound Volume", "Adjust menu sound volume.", 0, 100, 5, 18, function(value)
+	ui:SetSoundVolume(value / 100)
+end)
+
+settingsMenu:Button("Test Notification", "Show a sample message.", function()
+	notify("INTERACTION MENU", "This is a GTA style notification.", 3, "Success")
+end)
+
+settingsMenu:Button("Reset Character", "Reset local character settings.", function()
+	setGodMode(false)
+	setSuperJump(false)
+	setFastWalk(false)
+	setWalkSpeed(16)
+	setInvisible(false)
+
+	Settings.GodMode = false
+	Settings.SuperJump = false
+	Settings.FastWalk = false
+	Settings.FastWalkSpeed = 16
+	Settings.Invisible = false
+
+	notify("PLAYER", "Character settings reset.", 2.5, "Warning")
+end)
+
+local ThemeOptions = GmmUI.GetThemeNames()
+
+themeMenu:List("Menu Style", "Switch between GTA V inspired styles.", ThemeOptions, 1, function(theme)
+	Settings.CurrentTheme = theme
+	ui:SetTheme(theme)
+	notify("STYLE CHANGED", theme .. " loaded.", 2.5, "Success")
+end)
+
+local rebuildSavedLocationMenu
+local refreshPlayerList
+
+rebuildSavedLocationMenu = function()
+	savedLocMenu:Clear()
+
+	savedLocMenu:Button("Save Current Position", "Store your current spot.", function()
+		local name = "LOCATION " .. tostring(#Settings.SavedLocations + 1)
+		saveLocation(name)
+		rebuildSavedLocationMenu()
+		notify("TELEPORT", name .. " saved.", 2, "Success")
+	end)
+
+	savedLocMenu:Button("Clear All Saved", "Remove all saved spots.", function()
+		Settings.SavedLocations = {}
+		rebuildSavedLocationMenu()
+		notify("TELEPORT", "All saved locations removed.", 2.5, "Warning")
+	end)
+
+	for _, entry in ipairs(Settings.SavedLocations) do
+		savedLocMenu:Button(entry.Name, "Teleport to " .. entry.Name .. ".", function()
+			teleportTo(entry.Position + Vector3.new(0, 3, 0))
+			notify("TELEPORT", "Moved to " .. entry.Name .. ".", 2, "Success")
+		end)
+	end
+end
+
+refreshPlayerList = function()
+	tpPlayerMenu:Clear()
+
+	tpPlayerMenu:Button("Refresh Player List", "Reload the current players.", function()
+		refreshPlayerList()
+		notify("PLAYERS", "Player list refreshed.", 2, "Success")
+	end)
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
+			tpPlayerMenu:Button(player.Name, "Teleport near " .. player.Name .. ".", function()
+				teleportToPlayer(player.Name)
+			end)
+		end
+	end
+end
+
+rebuildSavedLocationMenu()
+refreshPlayerList()
+
+Players.PlayerAdded:Connect(function()
+	task.defer(refreshPlayerList)
+end)
+
+Players.PlayerRemoving:Connect(function()
+	task.defer(refreshPlayerList)
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+	applyCurrentCharacterState()
+end)
+
+ui:PushMenu(homeMenu)
+notify("INTERACTION MENU", "Loaded successfully.", 3, "Success")
