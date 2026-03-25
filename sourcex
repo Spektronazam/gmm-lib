@@ -1,0 +1,1536 @@
+-- syndrez 2026
+local plrs = game:GetService("Players")
+local ts = game:GetService("TweenService")
+local cas = game:GetService("ContextActionService")
+local ss = game:GetService("SoundService")
+local rs = game:GetService("RunService")
+local uis = game:GetService("UserInputService")
+
+local G = {}
+G.__index = G
+local M = {}
+M.__index = M
+
+local function mk(c, p)
+	local i = Instance.new(c)
+	for k, v in pairs(p or {}) do i[k] = v end
+	return i
+end
+
+local function tw(o, ti, p)
+	local t = ts:Create(o, ti, p)
+	t:Play()
+	return t
+end
+
+local function lerpc3(a, b, t)
+	return Color3.new(a.R+(b.R-a.R)*t, a.G+(b.G-a.G)*t, a.B+(b.B-a.B)*t)
+end
+local function lit(c, a) return lerpc3(c, Color3.new(1,1,1), a) end
+local function dim(c, a) return lerpc3(c, Color3.new(0,0,0), a) end
+
+local function sshift(c, a)
+	if (0.2126*c.R)+(0.7152*c.G)+(0.0722*c.B) > 0.6 then return dim(c,a) end
+	return lit(c,a)
+end
+
+local function dupe(t)
+	local r = {}
+	for k,v in pairs(t or {}) do
+		if typeof(v)=="table" then
+			local x = {}
+			for ik,iv in pairs(v) do x[ik]=iv end
+			r[k]=x
+		else r[k]=v end
+	end
+	return r
+end
+
+local function patch(dst, src)
+	for k,v in pairs(src or {}) do
+		if typeof(v)=="table" and typeof(dst[k])=="table" then
+			for ik,iv in pairs(v) do dst[k][ik]=iv end
+		else dst[k]=v end
+	end
+	return dst
+end
+
+local function corner(o, r) return mk("UICorner",{Parent=o,CornerRadius=UDim.new(0,math.max(0,tonumber(r)or 0))}) end
+local function stroke(o, c, tr, th) return mk("UIStroke",{Parent=o,ApplyStrokeMode=Enum.ApplyStrokeMode.Border,Color=c,Transparency=tr or 0,Thickness=th or 1}) end
+local function pad(o, l, r, t, b) return mk("UIPadding",{Parent=o,PaddingLeft=UDim.new(0,l or 0),PaddingRight=UDim.new(0,r or 0),PaddingTop=UDim.new(0,t or 0),PaddingBottom=UDim.new(0,b or 0)}) end
+
+local function offud2(p, x, y)
+	return UDim2.new(p.X.Scale, p.X.Offset+(x or 0), p.Y.Scale, p.Y.Offset+(y or 0))
+end
+
+local function up(s) return string.upper(tostring(s or "")) end
+
+local function gui_root()
+	local lp = plrs.LocalPlayer
+	local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
+	return pg or game:GetService("CoreGui")
+end
+
+local Boot = {}
+Boot.__index = Boot
+
+Boot.PROBES = {
+	{"getgenv","getgenv","Env"},{"getrenv","getrenv","Env"},{"getsenv","getsenv","Env"},
+	{"getrawmetatable","getrawmetatable","Meta"},{"setrawmetatable","setrawmetatable","Meta"},
+	{"hookmetamethod","hookmetamethod","Hook"},{"hookfunction","hookfunction","Hook"},
+	{"newcclosure","newcclosure","Hook"},{"iscclosure","iscclosure","Closure"},
+	{"islclosure","islclosure","Closure"},{"getnamecallmethod","getnamecallmethod","Hook"},
+	{"setnamecallmethod","setnamecallmethod","Hook"},{"checkcaller","checkcaller","Caller"},
+	{"getcallingscript","getcallingscript","Caller"},{"setclipboard","setclipboard","Clip"},
+	{"setfflag","setfflag","FF"},{"getfflag","getfflag","FF"},
+	{"isrbxactive","isrbxactive","Input"},{"keypress","keypress","Input"},
+	{"keyrelease","keyrelease","Input"},{"mouse1click","mouse1click","Input"},
+	{"mouse1press","mouse1press","Input"},{"mouse1release","mouse1release","Input"},
+	{"mouse2click","mouse2click","Input"},{"mousemoverel","mousemoverel","Input"},
+	{"mousemoveabs","mousemoveabs","Input"},{"mousescroll","mousescroll","Input"},
+	{"readfile","readfile","FS"},{"writefile","writefile","FS"},
+	{"appendfile","appendfile","FS"},{"loadfile","loadfile","FS"},
+	{"isfile","isfile","FS"},{"isfolder","isfolder","FS"},
+	{"makefolder","makefolder","FS"},{"delfolder","delfolder","FS"},
+	{"delfile","delfile","FS"},{"listfiles","listfiles","FS"},
+	{"request","request","HTTP"},{"http_request","http_request","HTTP"},
+	{"syn","syn (Synapse)","Exec"},{"fluxus","fluxus","Exec"},
+	{"getinstances","getinstances","Inst"},{"getnilinstances","getnilinstances","Inst"},
+	{"getscripts","getscripts","Scripts"},{"getrunningscripts","getrunningscripts","Scripts"},
+	{"getloadedmodules","getloadedmodules","Scripts"},{"getconnections","getconnections","Conn"},
+	{"firesignal","firesignal","Conn"},{"fireclickdetector","fireclickdetector","Fire"},
+	{"fireproximityprompt","fireproximityprompt","Fire"},{"firetouchinterest","firetouchinterest","Fire"},
+	{"decompile","decompile","Dbg"},{"getinfo","debug.getinfo","Dbg"},
+	{"getupvalue","debug.getupvalue","Dbg"},{"setupvalue","debug.setupvalue","Dbg"},
+	{"getconstant","debug.getconstant","Dbg"},{"setconstant","debug.setconstant","Dbg"},
+	{"getstack","debug.getstack","Dbg"},{"setstack","debug.setstack","Dbg"},
+	{"getprotos","debug.getprotos","Dbg"},{"getupvalues","debug.getupvalues","Dbg"},
+	{"getconstants","debug.getconstants","Dbg"},{"Drawing","Drawing.new","Draw"},
+	{"crypt","crypt","Crypto"},{"base64_encode","base64 encode","Crypto"},
+	{"base64_decode","base64 decode","Crypto"},{"saveinstance","saveinstance","Save"},
+	{"identifyexecutor","identifyexecutor","Exec"},
+}
+
+Boot.Deps = {}
+
+function Boot.RegDep(lbl, fns) Boot.Deps[lbl] = fns end
+
+function Boot.Scan()
+	local out = {Ok={},Nope={},Tot=0,Nok=0,Nfail=0,Pct=0,High=false}
+	for _, pr in ipairs(Boot.PROBES) do
+		local gn, dn, cat = pr[1], pr[2], pr[3]
+		out.Tot += 1
+		local hit = false
+		pcall(function()
+			local e = getfenv(0)
+			if e[gn] ~= nil then hit=true; return end
+			if _G[gn] ~= nil then hit=true; return end
+			if shared and shared[gn] ~= nil then hit=true; return end
+			if rawget(_G,gn) ~= nil then hit=true end
+		end)
+		if not hit then
+			pcall(function()
+				if typeof(getfenv(0)[gn])=="function" then hit=true end
+			end)
+		end
+		if hit then
+			out.Nok += 1
+			table.insert(out.Ok, {Name=dn, Cat=cat})
+		else
+			out.Nfail += 1
+			table.insert(out.Nope, {Name=dn, Cat=cat})
+		end
+	end
+	out.Pct = out.Tot > 0 and (out.Nok/out.Tot) or 0
+	out.High = out.Pct >= 0.7
+	return out
+end
+
+function Boot.Chk(lbl, scan)
+	local d = Boot.Deps[lbl]
+	if not d then return true end
+	local fm = {}
+	for _, f in ipairs(scan.Nope) do fm[f.Name]=true end
+	for _, rn in ipairs(d) do
+		if fm[rn] then return false end
+	end
+	return true
+end
+
+local TH_ORDER = {"GTA5","Online","Michael","Franklin","Trevor","Director"}
+
+local THEMES = {
+	GTA5={Accent=Color3.fromRGB(60,120,255),Select=Color3.fromRGB(242,242,242),Bg=Color3.fromRGB(8,8,8),Text=Color3.fromRGB(255,255,255),TitleText=Color3.fromRGB(255,255,255),SelectedText=Color3.fromRGB(12,12,12),Scroller=Color3.fromRGB(60,120,255)},
+	Online={Accent=Color3.fromRGB(80,190,110),Select=Color3.fromRGB(242,242,242),Bg=Color3.fromRGB(8,8,8),Text=Color3.fromRGB(255,255,255),TitleText=Color3.fromRGB(255,255,255),SelectedText=Color3.fromRGB(12,12,12),Scroller=Color3.fromRGB(80,190,110)},
+	Michael={Accent=Color3.fromRGB(70,130,255),Select=Color3.fromRGB(242,242,242),Bg=Color3.fromRGB(8,8,8),Text=Color3.fromRGB(255,255,255),TitleText=Color3.fromRGB(255,255,255),SelectedText=Color3.fromRGB(12,12,12),Scroller=Color3.fromRGB(70,130,255)},
+	Franklin={Accent=Color3.fromRGB(85,205,95),Select=Color3.fromRGB(242,242,242),Bg=Color3.fromRGB(8,8,8),Text=Color3.fromRGB(255,255,255),TitleText=Color3.fromRGB(255,255,255),SelectedText=Color3.fromRGB(12,12,12),Scroller=Color3.fromRGB(85,205,95)},
+	Trevor={Accent=Color3.fromRGB(255,145,55),Select=Color3.fromRGB(242,242,242),Bg=Color3.fromRGB(8,8,8),Text=Color3.fromRGB(255,255,255),TitleText=Color3.fromRGB(255,255,255),SelectedText=Color3.fromRGB(12,12,12),Scroller=Color3.fromRGB(255,145,55)},
+	Director={Accent=Color3.fromRGB(230,188,77),Select=Color3.fromRGB(242,242,242),Bg=Color3.fromRGB(8,8,8),Text=Color3.fromRGB(255,255,255),TitleText=Color3.fromRGB(255,255,255),SelectedText=Color3.fromRGB(12,12,12),Scroller=Color3.fromRGB(230,188,77)},
+}
+
+local DEF = {
+	Theme="GTA5",Title="INTERACTION MENU",Tab="HOME",
+	Size=UDim2.fromOffset(330,505),
+	Position=UDim2.new(0,-340,0.03,0),
+	FinalPosition=UDim2.new(0.005,0,0.03,0),
+	DisplayOrder=2147483647,
+	Accent=Color3.fromRGB(60,120,255),Select=Color3.fromRGB(242,242,242),
+	Bg=Color3.fromRGB(8,8,8),Text=Color3.fromRGB(255,255,255),
+	TitleText=Color3.fromRGB(255,255,255),SelectedText=Color3.fromRGB(12,12,12),
+	Scroller=Color3.fromRGB(60,120,255),
+	ScrollBarThickness=4,ScrollSmoothness=4,
+	HeaderHeight=84,SubHeight=24,FooterHeight=54,RowHeight=34,RowGap=0,CornerRadius=0,
+	UseSounds=true,SoundVolume=0.18,
+	SoundIds={
+		Move="rbxasset://sounds/clickfast.wav",
+		Change="rbxasset://sounds/clickfast.wav",
+		Select="rbxasset://sounds/button.wav",
+		Back="rbxasset://sounds/button.wav",
+		Open="rbxasset://sounds/electronicpingshort.wav",
+		Close="rbxasset://sounds/electronicpingshort.wav",
+		Notify="rbxassetid://6236460927",
+		Error="rbxassetid://204074025",
+		Boot="rbxassetid://153239830",
+		MissionPass="rbxassetid://8703854496",
+	},
+	NotificationDuration=4,NotificationWidth=380,
+	Enable3D=false,Perspective3DAngle=8,Perspective3DDepth=0.04,
+	RunBootloader=true,BootloaderTimeout=8,
+}
+
+local function derive(o)
+	o.Select = o.Select or Color3.fromRGB(242,242,242)
+	o.Panel = o.Panel or Color3.fromRGB(7,7,7)
+	o.Panel2 = o.Panel2 or Color3.fromRGB(18,18,18)
+	o.Row = o.Row or Color3.fromRGB(28,28,28)
+	o.RowHover = o.RowHover or Color3.fromRGB(42,42,42)
+	o.RowSelected = o.RowSelected or o.Select
+	o.Pill = o.Pill or Color3.fromRGB(20,20,20)
+	o.Stroke = o.Stroke or Color3.fromRGB(70,70,70)
+	o.MutedText = o.MutedText or Color3.fromRGB(185,185,185)
+	o.HeaderAccent2 = o.HeaderAccent2 or sshift(o.Accent, 0.12)
+end
+
+local function buildopts(uo)
+	local raw = dupe(uo or {})
+	local base = dupe(DEF)
+	local th = raw.Theme
+	raw.Theme = nil
+	if typeof(th)=="string" and THEMES[th] then
+		patch(base, THEMES[th])
+	elseif typeof(th)=="table" then
+		patch(base, th)
+	end
+	patch(base, raw)
+	base.Theme = typeof(th)=="string" and th or (typeof(th)=="table" and "Custom" or base.Theme)
+	derive(base)
+	return base
+end
+
+G.PresetThemes = THEMES
+G.Bootloader = Boot
+
+G.GetThemeNames = function()
+	local n = {}
+	for _, nm in ipairs(TH_ORDER) do
+		if THEMES[nm] then n[#n+1]=nm end
+	end
+	return n
+end
+
+M.new = function(ui, name)
+	local self = setmetatable({}, M)
+	self.UI = ui
+	self.Name = up(name or "MENU")
+	self.Items = {}
+	return self
+end
+
+function M:_add(itm)
+	self.Items[#self.Items+1] = itm
+	return itm
+end
+
+function M:Clear()
+	self.Items = {}
+	if self.UI and self.UI.Cur == self then self.UI:_render(self) end
+end
+
+function M:Button(lbl, desc, cb, reqs)
+	local itm = self:_add({
+		Type="Button",Label=tostring(lbl),Desc=tostring(desc or ""),
+		Reqs=reqs,Ok=true,
+		Activate=function()
+			if typeof(cb)=="function" then task.spawn(cb) end
+		end
+	})
+	if reqs then Boot.RegDep(tostring(lbl), reqs) end
+	return itm
+end
+
+function M:Toggle(lbl, desc, def, cb, reqs)
+	local st = def==true
+	local itm = self:_add({
+		Type="Toggle",Label=tostring(lbl),Desc=tostring(desc or ""),
+		Reqs=reqs,Ok=true,
+		Get=function() return st end,
+		Set=function(v)
+			st = v and true or false
+			if typeof(cb)=="function" then task.spawn(cb,st) end
+		end,
+		Left=function(it) if not it.Ok then return end it.Set(not it.Get()) end,
+		Right=function(it) if not it.Ok then return end it.Set(not it.Get()) end,
+		Activate=function(it) if not it.Ok then return end it.Set(not it.Get()) end,
+		ValueText=function(it)
+			if not it.Ok then return "N/A" end
+			return it.Get() and "ON" or "OFF"
+		end
+	})
+	if reqs then Boot.RegDep(tostring(lbl), reqs) end
+	return itm
+end
+
+function M:Slider(lbl, desc, mn, mx, stp, def, cb, reqs)
+	mn = tonumber(mn) or 0
+	mx = tonumber(mx) or 100
+	stp = tonumber(stp) or 1
+	local val = math.clamp(tonumber(def) or mn, mn, mx)
+
+	local function sv(v)
+		v = math.clamp(v, mn, mx)
+		val = math.clamp(mn+(math.floor(((v-mn)/stp)+0.5)*stp), mn, mx)
+		if typeof(cb)=="function" then task.spawn(cb, val) end
+	end
+
+	local itm = self:_add({
+		Type="Slider",Label=tostring(lbl),Desc=tostring(desc or ""),
+		Reqs=reqs,Ok=true,
+		Get=function() return val end,
+		Set=sv,
+		Left=function(it) if not it.Ok then return end it.Set(it.Get()-stp) end,
+		Right=function(it) if not it.Ok then return end it.Set(it.Get()+stp) end,
+		Activate=function() end,
+		ValueText=function(it)
+			if not it.Ok then return "N/A" end
+			return tostring(it.Get())
+		end
+	})
+	if reqs then Boot.RegDep(tostring(lbl), reqs) end
+	return itm
+end
+
+function M:List(lbl, desc, vals, di, cb, reqs)
+	vals = typeof(vals)=="table" and vals or {}
+	if #vals==0 then vals={"N/A"} end
+	local idx = math.clamp(tonumber(di) or 1, 1, #vals)
+
+	local function si(i)
+		idx = ((i-1)%#vals)+1
+		if typeof(cb)=="function" then task.spawn(cb, vals[idx], idx) end
+	end
+
+	local itm = self:_add({
+		Type="List",Label=tostring(lbl),Desc=tostring(desc or ""),
+		Reqs=reqs,Ok=true,
+		GetIndex=function() return idx end,
+		SetIndex=si,
+		Left=function(it) if not it.Ok then return end it.SetIndex(it.GetIndex()-1) end,
+		Right=function(it) if not it.Ok then return end it.SetIndex(it.GetIndex()+1) end,
+		Activate=function(it) if not it.Ok then return end it.SetIndex(it.GetIndex()+1) end,
+		ValueText=function() return tostring(vals[idx]) end
+	})
+	if reqs then Boot.RegDep(tostring(lbl), reqs) end
+	return itm
+end
+
+function M:Submenu(lbl, desc, sub, reqs)
+	assert(getmetatable(sub)==M)
+	local itm = self:_add({
+		Type="Submenu",Label=tostring(lbl),Desc=tostring(desc or ""),
+		HasArrow=true,Reqs=reqs,Ok=true,_subref=sub,
+		Activate=function() self.UI:PushMenu(sub) end
+	})
+	if reqs then Boot.RegDep(tostring(lbl), reqs) end
+	return itm
+end
+
+function M:ApplyBoot(scan)
+	local good, bad = {}, {}
+	for _, itm in ipairs(self.Items) do
+		local sup = true
+		if itm.Reqs then sup = Boot.Chk(itm.Label, scan) end
+		itm.Ok = sup
+		if sup then good[#good+1]=itm else bad[#bad+1]=itm end
+		if itm.Type=="Submenu" and itm._subref then itm._subref:ApplyBoot(scan) end
+	end
+	self.Items = {}
+	for _,x in ipairs(good) do self.Items[#self.Items+1]=x end
+	for _,x in ipairs(bad) do self.Items[#self.Items+1]=x end
+end
+
+local function bootNotif(pgui, opts, scan, onYes, onNo)
+	local hi = scan.High
+	local ac = hi and Color3.fromRGB(80,190,110) or Color3.fromRGB(255,145,55)
+	local pct = math.floor(scan.Pct*100)
+
+	local msg = hi
+		and ("YOUR EXECUTOR SUPPORTS EVERY FEATURE ("..pct.."%), CONTINUE TO RUN?")
+		or ("YOUR EXECUTOR DOESN'T SUPPORT SOME FEATURES ("..scan.Nfail.." FAILED), RUN ANYWAYS?")
+
+	local box = mk("Frame",{
+		Parent=pgui,AnchorPoint=Vector2.new(0,1),
+		Position=UDim2.new(0,-420,1,-20),
+		Size=UDim2.fromOffset(400,0),AutomaticSize=Enum.AutomaticSize.Y,
+		BackgroundColor3=Color3.fromRGB(12,12,12),BackgroundTransparency=0.04,
+		BorderSizePixel=0,ClipsDescendants=true,ZIndex=99999,
+	})
+	corner(box,4)
+	stroke(box, Color3.fromRGB(60,60,60), 0.3, 1)
+
+	mk("Frame",{Parent=box,Size=UDim2.new(1,0,0,3),BackgroundColor3=ac,BorderSizePixel=0,ZIndex=100000})
+	mk("Frame",{Parent=box,Position=UDim2.fromOffset(0,3),Size=UDim2.new(0,4,1,-3),BackgroundColor3=ac,BorderSizePixel=0,ZIndex=100000})
+
+	local inner = mk("Frame",{
+		Parent=box,Position=UDim2.fromOffset(14,14),
+		Size=UDim2.new(1,-28,0,0),AutomaticSize=Enum.AutomaticSize.Y,
+		BackgroundTransparency=1,ZIndex=100000,
+	})
+	mk("UIListLayout",{Parent=inner,Padding=UDim.new(0,8),SortOrder=Enum.SortOrder.LayoutOrder})
+
+	local trow = mk("Frame",{Parent=inner,Size=UDim2.new(1,0,0,22),BackgroundTransparency=1,LayoutOrder=1,ZIndex=100000})
+	mk("TextLabel",{
+		Parent=trow,Size=UDim2.fromScale(1,1),BackgroundTransparency=1,
+		Font=Enum.Font.ArialBold,
+		Text=hi and "GMM \226\128\148 EXECUTOR READY" or "GMM \226\128\148 COMPATIBILITY WARNING",
+		TextColor3=ac,TextSize=16,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=100001,
+	})
+
+	local barOut = mk("Frame",{
+		Parent=inner,Size=UDim2.new(1,0,0,14),
+		BackgroundColor3=Color3.fromRGB(30,30,30),BorderSizePixel=0,
+		LayoutOrder=2,ZIndex=100000,
+	})
+	corner(barOut,3)
+
+	local barFill = mk("Frame",{
+		Parent=barOut,Size=UDim2.new(0,0,1,0),
+		BackgroundColor3=ac,BorderSizePixel=0,ZIndex=100001,
+	})
+	corner(barFill,3)
+
+	mk("TextLabel",{
+		Parent=barOut,Size=UDim2.fromScale(1,1),BackgroundTransparency=1,
+		Font=Enum.Font.ArialBold,
+		Text=scan.Nok.." / "..scan.Tot.." FUNCTIONS",
+		TextColor3=Color3.fromRGB(255,255,255),TextSize=10,ZIndex=100002,
+	})
+
+	mk("TextLabel",{
+		Parent=inner,Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y,
+		BackgroundTransparency=1,Font=Enum.Font.Arial,Text=msg,
+		TextColor3=Color3.fromRGB(210,210,210),TextSize=13,
+		TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left,
+		LayoutOrder=3,ZIndex=100001,
+	})
+
+	if #scan.Nope > 0 then
+		local ft = ""
+		local sc = math.min(#scan.Nope, 8)
+		for i=1,sc do
+			ft = ft.."\226\156\149 "..scan.Nope[i].Name
+			if i < sc then ft = ft.."\n" end
+		end
+		if #scan.Nope > sc then
+			ft = ft.."\n... +"..(#scan.Nope-sc).." MORE"
+		end
+		mk("TextLabel",{
+			Parent=inner,Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y,
+			BackgroundTransparency=1,Font=Enum.Font.Code,Text=ft,
+			TextColor3=Color3.fromRGB(180,80,80),TextSize=11,
+			TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left,
+			LayoutOrder=4,ZIndex=100001,
+		})
+	end
+
+	local brow = mk("Frame",{Parent=inner,Size=UDim2.new(1,0,0,34),BackgroundTransparency=1,LayoutOrder=5,ZIndex=100000})
+
+	local yb = mk("TextButton",{
+		Parent=brow,Position=UDim2.fromOffset(0,0),Size=UDim2.new(0.48,0,1,0),
+		BackgroundColor3=ac,BorderSizePixel=0,Font=Enum.Font.ArialBold,
+		Text="YES \226\128\148 RUN",TextColor3=Color3.fromRGB(12,12,12),
+		TextSize=14,AutoButtonColor=false,ZIndex=100001,
+	})
+	corner(yb,4)
+
+	local nb = mk("TextButton",{
+		Parent=brow,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,0),
+		Size=UDim2.new(0.48,0,1,0),BackgroundColor3=Color3.fromRGB(45,45,45),
+		BorderSizePixel=0,Font=Enum.Font.ArialBold,Text="NO \226\128\148 CANCEL",
+		TextColor3=Color3.fromRGB(200,200,200),TextSize=14,AutoButtonColor=false,ZIndex=100001,
+	})
+	corner(nb,4)
+
+	mk("Frame",{Parent=inner,Size=UDim2.new(1,0,0,4),BackgroundTransparency=1,LayoutOrder=6})
+
+	yb.MouseEnter:Connect(function() tw(yb,TweenInfo.new(0.12),{BackgroundColor3=lit(ac,0.15)}) end)
+	yb.MouseLeave:Connect(function() tw(yb,TweenInfo.new(0.12),{BackgroundColor3=ac}) end)
+	nb.MouseEnter:Connect(function() tw(nb,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(65,65,65)}) end)
+	nb.MouseLeave:Connect(function() tw(nb,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(45,45,45)}) end)
+
+	pcall(function()
+		local bs = mk("Sound",{
+			SoundId=opts.SoundIds.Boot or "rbxassetid://153239830",
+			Volume=0.2,Parent=ss,
+		})
+		bs:Play()
+		task.delay(5,function() if bs and bs.Parent then bs:Destroy() end end)
+	end)
+
+	task.defer(function()
+		tw(box, TweenInfo.new(0.45,Enum.EasingStyle.Quart,Enum.EasingDirection.Out), {
+			Position=UDim2.new(0,20,1,-20)
+		})
+		task.delay(0.3,function()
+			tw(barFill, TweenInfo.new(0.8,Enum.EasingStyle.Quart,Enum.EasingDirection.Out), {
+				Size=UDim2.new(math.clamp(scan.Pct,0,1),0,1,0)
+			})
+		end)
+	end)
+
+	local gone = false
+	local function kill(fn)
+		if gone then return end
+		gone = true
+		tw(box, TweenInfo.new(0.3,Enum.EasingStyle.Quart,Enum.EasingDirection.In), {
+			Position=UDim2.new(0,-420,1,-20)
+		})
+		task.delay(0.35,function()
+			if box then box:Destroy() end
+			if fn then fn() end
+		end)
+	end
+
+	yb.MouseButton1Click:Connect(function() kill(onYes) end)
+	nb.MouseButton1Click:Connect(function() kill(onNo) end)
+
+	return box, kill
+end
+
+G.new = function(uo)
+	local o = buildopts(uo)
+	local self = setmetatable({}, G)
+
+	self.O = o
+	self.ThemeName = o.Theme
+	self.Opened = false
+	self.Stack = {}
+	self.Cur = nil
+	self._conn = {}
+	self._rows = {}
+	self._ed = nil
+	self._hdir = nil
+	self._htok = 0
+	self._sty = 0
+	self._nots = {}
+	self._nctr = 0
+	self._scan = nil
+	self._3d = o.Enable3D or false
+	self._3dc = nil
+
+	local gui = mk("ScreenGui",{
+		Name="GmmUI",ResetOnSpawn=false,IgnoreGuiInset=true,
+		ZIndexBehavior=Enum.ZIndexBehavior.Sibling,
+		DisplayOrder=o.DisplayOrder,Parent=gui_root()
+	})
+	self.Gui = gui
+
+	self.Ov = mk("Frame",{
+		Parent=gui,Size=UDim2.fromScale(1,1),
+		BackgroundColor3=Color3.fromRGB(0,0,0),BackgroundTransparency=1,
+		BorderSizePixel=0,Active=true,Visible=false,
+	})
+
+	self.NH = mk("Frame",{
+		Parent=gui,AnchorPoint=Vector2.new(0,1),
+		Position=UDim2.new(0,18,1,-18),
+		Size=UDim2.fromOffset(o.NotificationWidth,0),
+		AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1,
+		BorderSizePixel=0,ZIndex=100000,
+	})
+	mk("UIListLayout",{
+		Parent=self.NH,Padding=UDim.new(0,6),
+		HorizontalAlignment=Enum.HorizontalAlignment.Left,
+		VerticalAlignment=Enum.VerticalAlignment.Bottom,
+		SortOrder=Enum.SortOrder.LayoutOrder,
+	})
+
+	self.Shad = mk("Frame",{
+		Parent=gui,Size=o.Size,Position=offud2(o.Position,4,6),
+		BackgroundColor3=Color3.fromRGB(0,0,0),BackgroundTransparency=1,
+		BorderSizePixel=0,Visible=false,
+	})
+	corner(self.Shad, o.CornerRadius)
+
+	self.Wrap = mk("Frame",{
+		Name="Wrap",Parent=gui,Size=o.Size,Position=o.Position,
+		BackgroundTransparency=1,BorderSizePixel=0,ClipsDescendants=false,
+	})
+
+	self.Mn = mk("Frame",{
+		Name="Mn",Parent=self.Wrap,Size=UDim2.fromScale(1,1),
+		Position=UDim2.fromScale(0,0),BackgroundColor3=o.Panel,
+		BackgroundTransparency=0.06,BorderSizePixel=0,
+		ClipsDescendants=true,Active=true,Visible=false,
+	})
+	corner(self.Mn, o.CornerRadius)
+	self.MnStr = stroke(self.Mn, o.Stroke, 0.18, 1)
+
+	self.Sc = mk("UIScale",{Parent=self.Mn,Scale=1})
+
+	self.Hdr = mk("Frame",{
+		Parent=self.Mn,Size=UDim2.new(1,0,0,o.HeaderHeight),
+		BackgroundColor3=o.Accent,BorderSizePixel=0
+	})
+
+	self.HdrGrad = mk("UIGradient",{
+		Parent=self.Hdr,
+		Color=ColorSequence.new({
+			ColorSequenceKeypoint.new(0, o.HeaderAccent2),
+			ColorSequenceKeypoint.new(1, dim(o.Accent, 0.18))
+		}),Rotation=90
+	})
+
+	mk("Frame",{
+		Parent=self.Hdr,Size=UDim2.new(1,0,0,2),
+		BackgroundColor3=lit(o.Accent,0.2),BackgroundTransparency=0.15,BorderSizePixel=0
+	})
+	self.HdrTop = self.Hdr:FindFirstChildWhichIsA("Frame")
+
+	mk("Frame",{
+		Parent=self.Hdr,AnchorPoint=Vector2.new(0,1),
+		Position=UDim2.new(0,0,1,0),Size=UDim2.new(1,0,0,2),
+		BackgroundColor3=Color3.fromRGB(255,255,255),BackgroundTransparency=0.9,BorderSizePixel=0
+	})
+
+	local tw2 = mk("Frame",{
+		Parent=self.Hdr,BackgroundTransparency=1,
+		Position=UDim2.fromOffset(12,8),Size=UDim2.new(1,-24,1,-16)
+	})
+
+	self.Ttl = mk("TextLabel",{
+		Parent=tw2,BackgroundTransparency=1,Size=UDim2.fromScale(1,0.65),
+		Font=Enum.Font.ArialBold,Text=up(o.Title),
+		TextColor3=o.TitleText or o.Text,TextSize=28,
+		TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Bottom,
+		TextStrokeTransparency=0.82,TextStrokeColor3=Color3.fromRGB(0,0,0),
+		TextTruncate=Enum.TextTruncate.AtEnd
+	})
+
+	self.Stl = mk("TextLabel",{
+		Parent=tw2,BackgroundTransparency=1,
+		Position=UDim2.fromScale(0,0.68),Size=UDim2.fromScale(1,0.3),
+		Font=Enum.Font.Arial,Text="",
+		TextColor3=lit(o.TitleText or o.Text, 0.1),TextTransparency=0.3,
+		TextSize=12,TextXAlignment=Enum.TextXAlignment.Left,
+		TextYAlignment=Enum.TextYAlignment.Top,TextTruncate=Enum.TextTruncate.AtEnd
+	})
+
+	self.Sub = mk("Frame",{
+		Parent=self.Mn,Position=UDim2.fromOffset(0,o.HeaderHeight),
+		Size=UDim2.new(1,0,0,o.SubHeight),BackgroundColor3=o.Panel2,BorderSizePixel=0
+	})
+
+	self.TabLbl = mk("TextLabel",{
+		Parent=self.Sub,BackgroundTransparency=1,
+		Position=UDim2.fromOffset(10,0),Size=UDim2.new(0.65,0,1,0),
+		Font=Enum.Font.ArialBold,Text=up(o.Tab),TextColor3=o.Text,
+		TextSize=14,TextXAlignment=Enum.TextXAlignment.Left,
+		TextTruncate=Enum.TextTruncate.AtEnd
+	})
+
+	self.CntW = mk("Frame",{
+		Parent=self.Sub,AnchorPoint=Vector2.new(1,0.5),
+		Position=UDim2.new(1,-8,0.5,0),Size=UDim2.fromOffset(70,18),
+		BackgroundColor3=o.Pill,BorderSizePixel=0
+	})
+	corner(self.CntW,0)
+	self.CntStr = stroke(self.CntW, o.Stroke, 0.28, 1)
+
+	self.CntLbl = mk("TextLabel",{
+		Parent=self.CntW,BackgroundTransparency=1,Size=UDim2.fromScale(1,1),
+		Font=Enum.Font.ArialBold,Text="0 / 0",TextColor3=o.Text,TextSize=12
+	})
+
+	local lt = o.HeaderHeight+o.SubHeight
+	local lb = o.FooterHeight
+
+	self.Scr = mk("ScrollingFrame",{
+		Parent=self.Mn,Position=UDim2.fromOffset(0,lt),
+		Size=UDim2.new(1,0,1,-(lt+lb)),BackgroundTransparency=1,
+		BorderSizePixel=0,ScrollBarThickness=o.ScrollBarThickness,
+		ScrollBarImageColor3=o.Scroller or o.Accent,
+		CanvasSize=UDim2.new(0,0,0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,
+		ScrollingDirection=Enum.ScrollingDirection.Y,ScrollingEnabled=true,
+		Active=true,VerticalScrollBarInset=Enum.ScrollBarInset.ScrollBar
+	})
+	pad(self.Scr,0,4,0,0)
+
+	self.Lay = mk("UIListLayout",{
+		Parent=self.Scr,SortOrder=Enum.SortOrder.LayoutOrder,
+		Padding=UDim.new(0,o.RowGap)
+	})
+
+	self.Ftr = mk("Frame",{
+		Parent=self.Mn,Position=UDim2.new(0,0,1,-o.FooterHeight),
+		Size=UDim2.new(1,0,0,o.FooterHeight),
+		BackgroundColor3=o.Panel2,BorderSizePixel=0
+	})
+	corner(self.Ftr,0)
+	self.FtrStr = stroke(self.Ftr, o.Stroke, 0.24, 1)
+
+	self.FtrAc = mk("Frame",{
+		Parent=self.Ftr,Size=UDim2.new(0,4,1,0),
+		BackgroundColor3=o.Accent,BorderSizePixel=0
+	})
+
+	self.Desc = mk("TextLabel",{
+		Parent=self.Ftr,BackgroundTransparency=1,
+		Position=UDim2.fromOffset(10,6),Size=UDim2.new(1,-20,0,24),
+		Font=Enum.Font.Arial,Text="Select an option.",TextColor3=o.Text,
+		TextSize=12,TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left,
+		TextYAlignment=Enum.TextYAlignment.Top
+	})
+
+	self.Hint = mk("TextLabel",{
+		Parent=self.Ftr,BackgroundTransparency=1,
+		AnchorPoint=Vector2.new(0,1),Position=UDim2.new(0,10,1,-4),
+		Size=UDim2.new(1,-20,0,14),Font=Enum.Font.ArialBold,
+		Text="ENTER SELECT   \226\134\144/\226\134\146 CHANGE   BACKSPACE BACK   F4 TOGGLE",
+		TextColor3=o.MutedText,TextSize=10,
+		TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd
+	})
+
+	self:_mksnds()
+	self:_binds()
+
+	return self
+end
+
+function G:Set3D(on)
+	self._3d = on and true or false
+	if self._3dc then self._3dc:Disconnect(); self._3dc=nil end
+	if not on then self.Mn.Rotation=0; return end
+	self._3dc = rs.RenderStepped:Connect(function()
+		if not self.Opened or not self._3d then return end
+		local mp = uis:GetMouseLocation()
+		local ap = self.Wrap.AbsolutePosition
+		local az = self.Wrap.AbsoluteSize
+		if az.X==0 or az.Y==0 then return end
+		local rx = math.clamp(((mp.X-ap.X)/az.X)*2-1,-1.5,1.5)
+		local ang = self.O.Perspective3DAngle or 8
+		local tgt = rx * ang * 0.3
+		self.Mn.Rotation = self.Mn.Rotation + (tgt - self.Mn.Rotation) * 0.1
+	end)
+end
+
+function G:_mksnds()
+	if self.SndF then self.SndF:Destroy(); self.SndF=nil end
+	self.Snds = {}
+	self.SndF = mk("Folder",{Name="GmmUI_Snd",Parent=ss})
+	for nm, id in pairs(self.O.SoundIds or {}) do
+		if tostring(id or "")~="" then
+			self.Snds[nm] = mk("Sound",{
+				Name=nm,Parent=self.SndF,SoundId=tostring(id),
+				Volume=tonumber(self.O.SoundVolume) or 0.18
+			})
+		end
+	end
+end
+
+function G:_snd(nm)
+	if not self.O.UseSounds then return end
+	local tpl = self.Snds and self.Snds[nm]
+	if not tpl then return end
+	local s = tpl:Clone()
+	s.Parent = self.SndF
+	s.Volume = tonumber(self.O.SoundVolume) or s.Volume
+	pcall(function() s:Play() end)
+	s.Ended:Connect(function() if s then s:Destroy() end end)
+	task.delay(5,function() if s and s.Parent then s:Destroy() end end)
+end
+
+function G:EnableSounds(on) self.O.UseSounds = on and true or false end
+
+function G:SetSoundVolume(v)
+	self.O.SoundVolume = math.clamp(tonumber(v) or self.O.SoundVolume or 0.18, 0, 1)
+	for _, tpl in pairs(self.Snds or {}) do tpl.Volume = self.O.SoundVolume end
+end
+
+function G:NewMenu(nm) return M.new(self, nm) end
+function G:SetTitle(t) self.Ttl.Text = up(t) end
+function G:SetSubtitle(t) self.Stl.Text = tostring(t or "") end
+function G:SetTab(t) self.TabLbl.Text = up(t) end
+
+function G:_ucnt()
+	local tot = (self.Cur and #self.Cur.Items) or 0
+	local sel = (tot>0 and math.clamp(self.SelIdx,1,tot)) or 0
+	self.CntLbl.Text = string.format("%d / %d", sel, tot)
+end
+
+function G:_savest()
+	local m = self.Cur
+	if not m then return end
+	m._si = tonumber(self.SelIdx) or 0
+	if self.Scr then
+		m._sy = tonumber(self._sty ~= nil and self._sty or self.Scr.CanvasPosition.Y) or 0
+	end
+end
+
+function G:_clr()
+	for _,r in ipairs(self._rows) do if r and r.Destroy then r:Destroy() end end
+	self._rows = {}
+end
+
+function G:_ncol(k)
+	if typeof(k)=="Color3" then return k end
+	local l = string.lower(tostring(k or "info"))
+	if l=="success" then return Color3.fromRGB(80,190,110)
+	elseif l=="warning" then return Color3.fromRGB(255,170,35)
+	elseif l=="error" then return Color3.fromRGB(255,74,74) end
+	return self.O.Accent
+end
+
+function G:_restylenots()
+	for i=#self._nots,1,-1 do
+		local d = self._nots[i]
+		if not d.Fr or d.Fr.Parent==nil then
+			table.remove(self._nots,i)
+		else
+			local ac = self:_ncol(d.Kind)
+			d.Fr.BackgroundColor3=Color3.fromRGB(10,10,10)
+			d.Str.Color=self.O.Stroke
+			d.Tl.BackgroundColor3=ac
+			d.Ti.TextColor3=self.O.Text
+			d.Bd.TextColor3=self.O.Text
+			d.Cl.TextColor3=self.O.MutedText
+			d.Ab.BackgroundColor3=ac
+			d.Lb.BackgroundColor3=Color3.fromRGB(55,55,55)
+			d.Lf.BackgroundColor3=ac
+		end
+	end
+end
+
+function G:Notify(title, text, dur, kind)
+	if text==nil then text=tostring(title or ""); title="NOTICE" end
+	title = up(title or "NOTICE")
+	text = tostring(text or "")
+	dur = tonumber(dur) or self.O.NotificationDuration or 4
+	kind = kind or "Info"
+	local ac = self:_ncol(kind)
+	self._nctr += 1
+
+	local note = mk("Frame",{
+		Parent=self.NH,LayoutOrder=-self._nctr,
+		Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y,
+		BackgroundColor3=Color3.fromRGB(10,10,10),BackgroundTransparency=1,
+		BorderSizePixel=0,ClipsDescendants=true
+	})
+
+	local nstr = stroke(note, self.O.Stroke, 1, 1)
+	local tl = mk("Frame",{Parent=note,Size=UDim2.new(1,0,0,2),BackgroundColor3=ac,BackgroundTransparency=1,BorderSizePixel=0})
+	local ab = mk("Frame",{Parent=note,Size=UDim2.new(0,4,1,0),BackgroundColor3=ac,BackgroundTransparency=1,BorderSizePixel=0})
+
+	local cl = mk("TextButton",{
+		Parent=note,AnchorPoint=Vector2.new(1,0),
+		Position=UDim2.new(1,-8,0,6),Size=UDim2.fromOffset(18,18),
+		BackgroundTransparency=1,Text="\226\156\149",Font=Enum.Font.ArialBold,
+		TextSize=12,TextColor3=self.O.MutedText,TextTransparency=1,AutoButtonColor=false
+	})
+
+	local ct = mk("Frame",{
+		Parent=note,Position=UDim2.fromOffset(12,8),
+		Size=UDim2.new(1,-32,0,0),AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1
+	})
+	mk("UIListLayout",{Parent=ct,Padding=UDim.new(0,3),SortOrder=Enum.SortOrder.LayoutOrder})
+
+	local ti = mk("TextLabel",{
+		Parent=ct,BackgroundTransparency=1,Size=UDim2.new(1,0,0,0),
+		AutomaticSize=Enum.AutomaticSize.Y,Font=Enum.Font.ArialBold,
+		Text=title,TextColor3=self.O.Text,TextTransparency=1,TextSize=14,
+		TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Top
+	})
+
+	local bd = mk("TextLabel",{
+		Parent=ct,BackgroundTransparency=1,Size=UDim2.new(1,0,0,0),
+		AutomaticSize=Enum.AutomaticSize.Y,Font=Enum.Font.Arial,
+		Text=text,TextColor3=self.O.Text,TextTransparency=1,TextSize=13,
+		TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Top
+	})
+
+	local lb = mk("Frame",{
+		Parent=note,AnchorPoint=Vector2.new(0,1),Position=UDim2.new(0,0,1,0),
+		Size=UDim2.new(1,0,0,3),BackgroundColor3=Color3.fromRGB(55,55,55),
+		BackgroundTransparency=1,BorderSizePixel=0
+	})
+	local lf = mk("Frame",{Parent=lb,Size=UDim2.new(1,0,1,0),BackgroundColor3=ac,BackgroundTransparency=1,BorderSizePixel=0})
+
+	local nd = {Fr=note,Str=nstr,Tl=tl,Ti=ti,Bd=bd,Cl=cl,Ab=ab,Lb=lb,Lf=lf,Kind=kind}
+	self._nots[#self._nots+1] = nd
+
+	local shut = false
+	local function die()
+		if shut then return end
+		shut = true
+		local xi = TweenInfo.new(0.15,Enum.EasingStyle.Quart,Enum.EasingDirection.In)
+		tw(note,xi,{BackgroundTransparency=1})
+		tw(nstr,xi,{Transparency=1})
+		tw(tl,xi,{BackgroundTransparency=1})
+		tw(ab,xi,{BackgroundTransparency=1})
+		tw(ti,xi,{TextTransparency=1})
+		tw(bd,xi,{TextTransparency=1})
+		tw(cl,xi,{TextTransparency=1})
+		tw(lb,xi,{BackgroundTransparency=1})
+		tw(lf,xi,{BackgroundTransparency=1})
+		task.delay(0.17,function()
+			for j=#self._nots,1,-1 do
+				if self._nots[j]==nd then table.remove(self._nots,j); break end
+			end
+			if note then note:Destroy() end
+		end)
+	end
+
+	cl.MouseEnter:Connect(function() cl.TextColor3=self.O.Text end)
+	cl.MouseLeave:Connect(function() cl.TextColor3=self.O.MutedText end)
+	cl.MouseButton1Click:Connect(die)
+
+	note.Position = UDim2.new(-1,0,0,0)
+	local ei = TweenInfo.new(0.25,Enum.EasingStyle.Quart,Enum.EasingDirection.Out)
+	tw(note,ei,{Position=UDim2.new(0,0,0,0),BackgroundTransparency=0.08})
+	tw(nstr,ei,{Transparency=0.3})
+	tw(tl,ei,{BackgroundTransparency=0})
+	tw(ab,ei,{BackgroundTransparency=0})
+	tw(ti,ei,{TextTransparency=0})
+	tw(bd,ei,{TextTransparency=0})
+	tw(cl,ei,{TextTransparency=0})
+	tw(lb,ei,{BackgroundTransparency=0})
+	tw(lf,ei,{BackgroundTransparency=0})
+	tw(lf, TweenInfo.new(dur,Enum.EasingStyle.Linear,Enum.EasingDirection.Out), {Size=UDim2.new(0,0,1,0)})
+
+	self:_snd(string.lower(tostring(kind))=="error" and "Error" or "Notify")
+	task.delay(dur, die)
+	return die
+end
+
+function G:_theme()
+	local o = self.O
+	self.Mn.BackgroundColor3 = o.Panel
+	self.MnStr.Color = o.Stroke
+	self.Hdr.BackgroundColor3 = o.Accent
+	self.HdrGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0,o.HeaderAccent2),
+		ColorSequenceKeypoint.new(1,dim(o.Accent,0.18))
+	})
+	self.Sub.BackgroundColor3 = o.Panel2
+	self.Ttl.TextColor3 = o.TitleText or o.Text
+	self.TabLbl.TextColor3 = o.Text
+	self.CntW.BackgroundColor3 = o.Pill
+	self.CntStr.Color = o.Stroke
+	self.CntLbl.TextColor3 = o.Text
+	self.Scr.ScrollBarImageColor3 = o.Scroller or o.Accent
+	self.Ftr.BackgroundColor3 = o.Panel2
+	self.FtrStr.Color = o.Stroke
+	self.FtrAc.BackgroundColor3 = o.Accent
+	self.Desc.TextColor3 = o.Text
+	self.Hint.TextColor3 = o.MutedText
+	self.NH.Size = UDim2.fromOffset(o.NotificationWidth,0)
+	self:_restylenots()
+	if self.Cur then self:_render(self.Cur) end
+end
+
+function G:SetTheme(th)
+	local no = dupe(self.O)
+	if typeof(th)=="string" then
+		assert(THEMES[th])
+		patch(no, THEMES[th])
+		no.Theme=th; self.ThemeName=th
+	elseif typeof(th)=="table" then
+		patch(no, th)
+		no.Theme="Custom"; self.ThemeName="Custom"
+	else error("bad theme") end
+	derive(no)
+	self.O = no
+	self:_mksnds()
+	self:_theme()
+end
+
+function G:_mkrow(itm, idx)
+	local o = self.O
+	local hv = itm.ValueText ~= nil
+	local ha = itm.HasArrow or itm.Type=="Submenu"
+	local dead = (itm.Ok==false)
+
+	local row = mk("TextButton",{
+		Parent=self.Scr,Size=UDim2.new(1,0,0,o.RowHeight),
+		BackgroundColor3=dead and dim(o.Row,0.3) or o.Row,
+		BackgroundTransparency=dead and 0.4 or 0.12,
+		BorderSizePixel=0,AutoButtonColor=false,Text="",
+		LayoutOrder=dead and (1000+idx) or idx,
+	})
+	local rstr = stroke(row, o.Stroke, 0.82, 1)
+
+	local selbg = mk("Frame",{
+		Parent=row,Size=UDim2.fromScale(1,1),
+		BackgroundColor3=o.RowSelected,BackgroundTransparency=1,BorderSizePixel=0
+	})
+	mk("UIGradient",{
+		Parent=selbg,
+		Color=ColorSequence.new({
+			ColorSequenceKeypoint.new(0,lit(o.RowSelected,0.01)),
+			ColorSequenceKeypoint.new(1,dim(o.RowSelected,0.08))
+		}),Rotation=90
+	})
+
+	local abar = mk("Frame",{
+		Parent=row,Size=UDim2.new(0,4,1,0),
+		BackgroundColor3=dead and Color3.fromRGB(100,40,40) or o.Accent,
+		BackgroundTransparency=1,BorderSizePixel=0
+	})
+
+	mk("Frame",{
+		Parent=row,AnchorPoint=Vector2.new(0,1),Position=UDim2.new(0,0,1,0),
+		Size=UDim2.new(1,0,0,1),BackgroundColor3=o.Stroke,
+		BackgroundTransparency=0.45,BorderSizePixel=0
+	})
+
+	local ltxt = mk("TextLabel",{
+		Parent=row,BackgroundTransparency=1,Position=UDim2.fromOffset(12,0),
+		Size=UDim2.new(1, hv and -132 or (ha and -30 or -16), 1, 0),
+		Font=Enum.Font.ArialBold,Text=up(itm.Label),
+		TextColor3=dead and Color3.fromRGB(120,120,120) or o.Text,
+		TextSize=16,TextXAlignment=Enum.TextXAlignment.Left,
+		TextTruncate=Enum.TextTruncate.AtEnd
+	})
+
+	if dead then
+		mk("Frame",{
+			Parent=ltxt,AnchorPoint=Vector2.new(0,0.5),
+			Position=UDim2.new(0,0,0.5,0),Size=UDim2.new(1,0,0,2),
+			BackgroundColor3=Color3.fromRGB(180,60,60),BackgroundTransparency=0.3,BorderSizePixel=0,
+		})
+		mk("TextLabel",{
+			Parent=row,AnchorPoint=Vector2.new(1,0.5),
+			Position=UDim2.new(1,ha and -26 or -8,0.5,0),
+			Size=UDim2.fromOffset(80,18),
+			BackgroundColor3=Color3.fromRGB(60,20,20),BackgroundTransparency=0.3,
+			Font=Enum.Font.ArialBold,Text="UNSUPPORTED",
+			TextColor3=Color3.fromRGB(180,80,80),TextSize=9,BorderSizePixel=0,
+		})
+	end
+
+	local vbtn, vstr, rtxt
+	if hv and not dead then
+		vbtn = mk("TextButton",{
+			Parent=row,AnchorPoint=Vector2.new(1,0.5),
+			Position=UDim2.new(1,ha and -26 or -8,0.5,0),
+			Size=UDim2.fromOffset(96,o.RowHeight-8),
+			BackgroundColor3=o.Pill,BorderSizePixel=0,AutoButtonColor=false,Text=""
+		})
+		corner(vbtn,0)
+		vstr = stroke(vbtn, o.Stroke, 0.35, 1)
+		rtxt = mk("TextLabel",{
+			Parent=vbtn,BackgroundTransparency=1,Position=UDim2.fromOffset(4,0),
+			Size=UDim2.new(1,-8,1,0),Font=Enum.Font.ArialBold,Text="",
+			TextColor3=o.Text,TextSize=14,TextXAlignment=Enum.TextXAlignment.Center,
+			TextTruncate=Enum.TextTruncate.AtEnd
+		})
+	end
+
+	local arr
+	if not dead then
+		arr = mk("TextLabel",{
+			Parent=row,BackgroundTransparency=1,AnchorPoint=Vector2.new(1,0.5),
+			Position=UDim2.new(1,-8,0.5,0),Size=UDim2.fromOffset(14,14),
+			Font=Enum.Font.ArialBold,Text="\226\128\186",TextColor3=o.MutedText,
+			TextSize=22,Visible=ha
+		})
+	end
+
+	local sel, hov = false, false
+
+	local function vbg()
+		if dead then return o.Pill end
+		if sel then return Color3.fromRGB(235,235,235) end
+		if itm.Type=="Toggle" and itm.Get and itm.Get() then return o.Accent end
+		if itm.Type=="Slider" and self._ed and self._ed.Itm==itm then return lerpc3(o.Accent,o.Pill,0.2) end
+		return o.Pill
+	end
+
+	local function vtc()
+		if dead then return Color3.fromRGB(100,100,100) end
+		if sel then return o.SelectedText or Color3.fromRGB(12,12,12) end
+		if itm.Type=="Toggle" and itm.Get and itm.Get() then return Color3.fromRGB(255,255,255) end
+		return o.Text
+	end
+
+	local function uvt()
+		if not rtxt then return end
+		local v = up(itm:ValueText())
+		if itm.Type=="Slider" and self._ed and self._ed.Itm==itm then
+			rtxt.Text = "\226\128\185 "..v.." \226\128\186"
+		elseif itm.Type=="List" and sel then
+			rtxt.Text = "\226\128\185 "..v.." \226\128\186"
+		else rtxt.Text = v end
+	end
+
+	local function vis(anim)
+		if dead then
+			row.BackgroundColor3=dim(o.Row,0.3)
+			row.BackgroundTransparency=0.4
+			selbg.BackgroundTransparency=1
+			abar.BackgroundTransparency=1
+			return
+		end
+		local rc = hov and o.RowHover or o.Row
+		local tc = sel and (o.SelectedText or Color3.fromRGB(12,12,12)) or o.Text
+		local ac2 = sel and tc or o.MutedText
+		if anim then
+			local ti = TweenInfo.new(0.08,Enum.EasingStyle.Linear,Enum.EasingDirection.Out)
+			tw(row,ti,{BackgroundColor3=rc})
+			tw(selbg,ti,{BackgroundTransparency=sel and 0 or 1})
+			tw(abar,ti,{BackgroundTransparency=sel and 0 or 1})
+			tw(rstr,ti,{Color=sel and o.Accent or o.Stroke, Transparency=sel and 0.4 or 0.82})
+		else
+			row.BackgroundColor3=rc
+			selbg.BackgroundTransparency=sel and 0 or 1
+			abar.BackgroundTransparency=sel and 0 or 1
+			rstr.Color=sel and o.Accent or o.Stroke
+			rstr.Transparency=sel and 0.4 or 0.82
+		end
+		ltxt.TextColor3=tc
+		if arr then arr.TextColor3=ac2 end
+		if rtxt then
+			rtxt.TextColor3=vtc()
+			vbtn.BackgroundColor3=vbg()
+			vstr.Color=sel and o.Accent or o.Stroke
+		end
+	end
+
+	local function refresh() uvt(); vis(false) end
+	local function setsel(on) sel=on==true; uvt(); vis(true) end
+	refresh()
+
+	row.MouseEnter:Connect(function() hov=true; vis(true) end)
+	row.MouseLeave:Connect(function() hov=false; vis(true) end)
+	row.MouseButton1Click:Connect(function()
+		if not self.Opened then return end
+		if dead then self:_snd("Error"); return end
+		if self._ed and self._ed.Itm~=itm then return end
+		self:SetSelected(idx, true)
+		self:Select()
+	end)
+
+	if vbtn then
+		vbtn.MouseEnter:Connect(function() hov=true; vis(true) end)
+		vbtn.MouseLeave:Connect(function() hov=false; vis(true) end)
+		vbtn.MouseButton1Down:Connect(function(x)
+			if not self.Opened or dead then return end
+			if self._ed and self._ed.Itm~=itm then return end
+			self:SetSelected(idx, true)
+			local mid = vbtn.AbsolutePosition.X+(vbtn.AbsoluteSize.X/2)
+			local dir = (x<mid) and -1 or 1
+			if itm.Type=="Slider" then
+				if not (self._ed and self._ed.Itm==itm) then self:BeginEdit() end
+				if dir<0 then self:DoLeft() else self:DoRight() end
+			elseif itm.Type=="List" or itm.Type=="Toggle" then
+				if dir<0 then self:DoLeft() else self:DoRight() end
+			else self:Select() end
+		end)
+	end
+
+	return row, setsel, refresh
+end
+
+function G:_render(menu)
+	self:_clr()
+	self.Cur = menu
+	self:SetTab(menu.Name)
+
+	for i, itm in ipairs(menu.Items) do
+		local row, ss2, rf = self:_mkrow(itm, i)
+		itm.__r = row
+		itm.__ss = ss2
+		itm.__rf = rf
+		self._rows[#self._rows+1] = row
+	end
+
+	if #menu.Items > 0 then
+		local sy = tonumber(menu._sy) or 0
+		if self._stw then pcall(function() self._stw:Cancel() end); self._stw=nil end
+		self.Scr.CanvasPosition = Vector2.new(0, sy)
+		self._sty = sy
+
+		local si = tonumber(menu._si)
+		if not (si and si>=1 and si<=#menu.Items) then
+			si = 1
+			for j, itm in ipairs(menu.Items) do
+				if itm.Ok~=false then si=j; break end
+			end
+		end
+		self:SetSelected(si, true)
+	else
+		self.SelIdx = 0
+		self.Desc.Text = "No options."
+		self:_ucnt()
+	end
+end
+
+function G:PushMenu(menu)
+	self:_savest()
+	self.Stack[#self.Stack+1] = menu
+	self:_render(menu)
+end
+
+function G:Back()
+	if self._ed then self:CancelEdit(); return end
+	if #self.Stack <= 1 then self:Close(); return end
+	self:_snd("Back")
+	self:_savest()
+	table.remove(self.Stack, #self.Stack)
+	self:_render(self.Stack[#self.Stack])
+end
+
+function G:_scrto(ty)
+	local scr = self.Scr
+	if not scr then return end
+	ty = tonumber(ty) or 0
+	self._sty = ty
+	local acy = scr.AbsoluteCanvasSize.Y
+	local mx = (acy>0) and math.max(0, acy-scr.AbsoluteSize.Y) or math.huge
+	ty = math.clamp(ty, 0, mx)
+	if self._stw then pcall(function() self._stw:Cancel() end); self._stw=nil end
+	local sm = tonumber(self.O and self.O.ScrollSmoothness) or 0
+	if sm<=0 then scr.CanvasPosition=Vector2.new(0,ty); self._sty=ty; return end
+	local dur = math.clamp(0.04*sm, 0.05, 0.3)
+	self._stw = tw(scr, TweenInfo.new(dur,Enum.EasingStyle.Quart,Enum.EasingDirection.Out), {
+		CanvasPosition=Vector2.new(0,ty)
+	})
+end
+
+function G:SetSelected(idx, silent)
+	if not self.Cur then return end
+	local items = self.Cur.Items
+	if #items==0 then return end
+	local prev = self.SelIdx
+	idx = ((idx-1)%#items)+1
+	self.SelIdx = idx
+
+	for i, it in ipairs(items) do
+		if it.__ss then it.__ss(i==idx) end
+	end
+
+	local it = items[idx]
+	local dsc = (it and it.Desc and it.Desc~="" and it.Desc) or "Select an option."
+	if it and it.Ok==false then
+		dsc = "\226\154\160 UNSUPPORTED \226\128\148 Your executor is missing required functions for this feature."
+	end
+	self.Desc.Text = dsc
+	self:_ucnt()
+
+	local r = it and it.__r
+	if r then
+		local mg = 4
+		local y = r.AbsolutePosition.Y
+		local h = r.AbsoluteSize.Y
+		local ty = self.Scr.AbsolutePosition.Y
+		local by = ty + self.Scr.AbsoluteSize.Y
+		if y < (ty+mg) then
+			self:_scrto(self.Scr.CanvasPosition.Y - ((ty+mg)-y))
+		elseif (y+h) > (by-mg) then
+			self:_scrto(self.Scr.CanvasPosition.Y + ((y+h)-(by-mg)))
+		end
+	end
+	self:_savest()
+	if not silent and prev~=idx and self.Opened then self:_snd("Move") end
+end
+
+function G:_selitm()
+	if not self.Cur then return nil end
+	return self.Cur.Items[self.SelIdx]
+end
+
+function G:_stoph(dir)
+	if dir==nil or self._hdir==dir then
+		self._hdir=nil
+		self._htok=(self._htok or 0)+1
+	end
+end
+
+function G:_starth(dir)
+	local it = self._ed and self._ed.Itm
+	if not (self.Opened and it and it==self:_selitm() and it.Type=="Slider") then return end
+	self._hdir = dir
+	self._htok = (self._htok or 0)+1
+	local tok = self._htok
+	task.spawn(function()
+		task.wait(0.35)
+		while self._htok==tok and self._hdir==dir do
+			if not self.Opened then break end
+			if not self._ed or self._ed.Itm~=it then break end
+			if dir<0 then self:DoLeft() else self:DoRight() end
+			task.wait(0.05)
+		end
+	end)
+end
+
+function G:BeginEdit()
+	if self._ed then return end
+	local it = self:_selitm()
+	if not it or it.Type~="Slider" or it.Ok==false then return end
+	self._ed = {Itm=it, Orig=(it.Get and it.Get()) or nil}
+	if it.__rf then it.__rf() end
+	self:_snd("Select")
+end
+
+function G:ConfirmEdit()
+	if not self._ed then return end
+	local it = self._ed.Itm
+	self._ed = nil
+	self:_stoph()
+	if it and it.__rf then it.__rf() end
+	self:_snd("Select")
+end
+
+function G:CancelEdit()
+	if not self._ed then return end
+	local it = self._ed.Itm
+	local og = self._ed.Orig
+	self._ed = nil
+	self:_stoph()
+	if it and og~=nil and it.Set then it.Set(og) end
+	if it and it.__rf then it.__rf() end
+	self:_snd("Back")
+end
+
+function G:DoLeft()
+	local it = self:_selitm()
+	if not it or it.Ok==false then return end
+	if it.Type=="Slider" and not (self._ed and self._ed.Itm==it) then return end
+	if it.Left then
+		it:Left()
+		if it.__rf then it.__rf() end
+		self:_snd("Change")
+	end
+end
+
+function G:DoRight()
+	local it = self:_selitm()
+	if not it or it.Ok==false then return end
+	if it.Type=="Slider" and not (self._ed and self._ed.Itm==it) then return end
+	if it.Right then
+		it:Right()
+		if it.__rf then it.__rf() end
+		self:_snd("Change")
+	end
+end
+
+function G:Select()
+	local it = self:_selitm()
+	if not it then return end
+	if it.Ok==false then
+		self:_snd("Error")
+		self:Notify("UNSUPPORTED","This feature requires functions your executor doesn't support.",3,"error")
+		return
+	end
+	if it.Type=="Slider" then
+		if self._ed and self._ed.Itm==it then self:ConfirmEdit() else self:BeginEdit() end
+		return
+	end
+	self:_snd((it.Type=="Toggle" or it.Type=="List") and "Change" or "Select")
+	if it.Activate then
+		it:Activate()
+		if it.__rf then it.__rf() end
+	end
+end
+
+function G:Open()
+	if self.Opened then return end
+	self.Opened = true
+	self.Ov.Visible = true
+	self.Shad.Visible = true
+	self.Mn.Visible = true
+
+	self.Ov.BackgroundTransparency = 1
+	tw(self.Ov, TweenInfo.new(0.2,Enum.EasingStyle.Quart,Enum.EasingDirection.Out), {BackgroundTransparency=0.58})
+
+	self.Shad.BackgroundTransparency = 1
+	tw(self.Shad, TweenInfo.new(0.2,Enum.EasingStyle.Quart,Enum.EasingDirection.Out), {BackgroundTransparency=0.7})
+
+	local sp = UDim2.new(0, -self.O.Size.X.Offset-20, self.O.FinalPosition.Y.Scale, self.O.FinalPosition.Y.Offset)
+	self.Wrap.Position = sp
+	tw(self.Wrap, TweenInfo.new(0.35,Enum.EasingStyle.Quart,Enum.EasingDirection.Out), {Position=self.O.FinalPosition})
+	self.Shad.Position = offud2(self.O.FinalPosition,4,6)
+
+	self.Sc.Scale = 0.97
+	tw(self.Sc, TweenInfo.new(0.2,Enum.EasingStyle.Quart,Enum.EasingDirection.Out), {Scale=1})
+
+	self.Mn.BackgroundTransparency = 0.2
+	tw(self.Mn, TweenInfo.new(0.15,Enum.EasingStyle.Linear,Enum.EasingDirection.Out), {BackgroundTransparency=0.06})
+
+	if self._3d then self:Set3D(true) end
+	self:_snd("Open")
+end
+
+function G:Close()
+	if not self.Opened then return end
+	if self._ed then self:ConfirmEdit() else self:_stoph() end
+	self.Opened = false
+	self:_snd("Close")
+
+	local hp = UDim2.new(0, -self.O.Size.X.Offset-20, self.O.FinalPosition.Y.Scale, self.O.FinalPosition.Y.Offset)
+	tw(self.Wrap, TweenInfo.new(0.25,Enum.EasingStyle.Quart,Enum.EasingDirection.In), {Position=hp})
+
+	local a = tw(self.Ov, TweenInfo.new(0.2,Enum.EasingStyle.Linear,Enum.EasingDirection.In), {BackgroundTransparency=1})
+	tw(self.Shad, TweenInfo.new(0.2,Enum.EasingStyle.Linear,Enum.EasingDirection.In), {BackgroundTransparency=1})
+	tw(self.Sc, TweenInfo.new(0.15,Enum.EasingStyle.Linear,Enum.EasingDirection.In), {Scale=0.97})
+
+	if self._3dc then self._3dc:Disconnect(); self._3dc=nil end
+	self.Mn.Rotation = 0
+
+	a.Completed:Connect(function()
+		if not self.Opened then
+			self.Ov.Visible=false
+			self.Shad.Visible=false
+			self.Mn.Visible=false
+		end
+	end)
+end
+
+function G:Toggle()
+	if self.Opened then self:Close() else self:Open() end
+end
+
+function G:_binds()
+	local o = self.O
+	self._cas = {
+		"GmmUI_Toggle","GmmUI_Up","GmmUI_Down","GmmUI_Left","GmmUI_Right",
+		"GmmUI_PageUp","GmmUI_PageDown","GmmUI_Back","GmmUI_Select"
+	}
+	for _,nm in ipairs(self._cas) do pcall(function() cas:UnbindAction(nm) end) end
+
+	local pri = (o.InputPriority~=nil and tonumber(o.InputPriority)) or (Enum.ContextActionPriority.High.Value+5000)
+	local function bd(n, fn, ...) cas:BindActionAtPriority(n, fn, false, pri, ...) end
+
+	bd("GmmUI_Toggle", function(_,st)
+		if st~=Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
+		self:Toggle()
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.F4, Enum.KeyCode.Insert)
+
+	bd("GmmUI_Up", function(_,st)
+		if st~=Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
+		if not self.Opened then return Enum.ContextActionResult.Pass end
+		if self._ed then return Enum.ContextActionResult.Sink end
+		self:SetSelected(self.SelIdx-1)
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.Up, Enum.KeyCode.KeypadEight, Enum.KeyCode.I)
+
+	bd("GmmUI_Down", function(_,st)
+		if st~=Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
+		if not self.Opened then return Enum.ContextActionResult.Pass end
+		if self._ed then return Enum.ContextActionResult.Sink end
+		self:SetSelected(self.SelIdx+1)
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.Down, Enum.KeyCode.KeypadTwo, Enum.KeyCode.K)
+
+	bd("GmmUI_Left", function(_,st)
+		if not self.Opened then return Enum.ContextActionResult.Pass end
+		if st==Enum.UserInputState.Begin then
+			self:DoLeft(); self:_starth(-1)
+			return Enum.ContextActionResult.Sink
+		elseif st==Enum.UserInputState.End then
+			self:_stoph(-1)
+			return Enum.ContextActionResult.Sink
+		end
+		return Enum.ContextActionResult.Pass
+	end, Enum.KeyCode.Left, Enum.KeyCode.KeypadFour, Enum.KeyCode.J)
+
+	bd("GmmUI_Right", function(_,st)
+		if not self.Opened then return Enum.ContextActionResult.Pass end
+		if st==Enum.UserInputState.Begin then
+			self:DoRight(); self:_starth(1)
+			return Enum.ContextActionResult.Sink
+		elseif st==Enum.UserInputState.End then
+			self:_stoph(1)
+			return Enum.ContextActionResult.Sink
+		end
+		return Enum.ContextActionResult.Pass
+	end, Enum.KeyCode.Right, Enum.KeyCode.KeypadSix, Enum.KeyCode.L)
+
+	bd("GmmUI_PageUp", function(_,st)
+		if st~=Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
+		if not self.Opened then return Enum.ContextActionResult.Pass end
+		if self._ed then return Enum.ContextActionResult.Sink end
+		self:SetSelected(self.SelIdx-10)
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.PageUp, Enum.KeyCode.KeypadNine)
+
+	bd("GmmUI_PageDown", function(_,st)
+		if st~=Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
+		if not self.Opened then return Enum.ContextActionResult.Pass end
+		if self._ed then return Enum.ContextActionResult.Sink end
+		self:SetSelected(self.SelIdx+10)
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.PageDown, Enum.KeyCode.KeypadThree)
+
+	bd("GmmUI_Back", function(_,st)
+		if st~=Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
+		if not self.Opened then return Enum.ContextActionResult.Pass end
+		if self._ed then self:CancelEdit() else self:Back() end
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.Backspace, Enum.KeyCode.KeypadZero, Enum.KeyCode.U)
+
+	bd("GmmUI_Select", function(_,st)
+		if st~=Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
+		if not self.Opened then return Enum.ContextActionResult.Pass end
+		self:Select()
+		return Enum.ContextActionResult.Sink
+	end, Enum.KeyCode.Return, Enum.KeyCode.KeypadFive, Enum.KeyCode.O)
+end
+
+function G:Boot(root, all)
+	local scan = Boot.Scan()
+	self._scan = scan
+
+	local xn = "Unknown Executor"
+	pcall(function()
+		local n, v = identifyexecutor()
+		if n then xn = tostring(n); if v then xn = xn.." "..tostring(v) end end
+	end)
+	self:SetSubtitle(xn.."  \226\128\162  "..scan.Nok.."/"..scan.Tot.." UNC")
+
+	if root then root:ApplyBoot(scan) end
+	if all then for _,m in ipairs(all) do m:ApplyBoot(scan) end end
+
+	bootNotif(self.Gui, self.O, scan,
+		function()
+			if root then self:PushMenu(root) end
+			task.delay(0.15, function() self:Open() end)
+		end,
+		function() self:Destroy() end
+	)
+end
+
+function G:Destroy()
+	for _,c in ipairs(self._conn) do pcall(function() c:Disconnect() end) end
+	self._conn = {}
+	if self._3dc then self._3dc:Disconnect(); self._3dc=nil end
+	if self._cas then
+		for _,nm in ipairs(self._cas) do pcall(function() cas:UnbindAction(nm) end) end
+		self._cas = nil
+	end
+	if self.SndF then self.SndF:Destroy(); self.SndF=nil end
+	if self.Gui then self.Gui:Destroy() end
+end
+
+return G
+```
